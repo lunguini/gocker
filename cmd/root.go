@@ -1,6 +1,8 @@
 package cmd
 
 import (
+	"context"
+
 	"github.com/lunguini/gocker/engine"
 	"github.com/urfave/cli/v3"
 )
@@ -23,6 +25,15 @@ func NewApp() *cli.Command {
 				Usage: "Enable debug output",
 			},
 		},
+		Before: func(ctx context.Context, cmd *cli.Command) (context.Context, error) {
+			// Skip validation for setup (it installs the binary) and
+			// when no subcommand is given (help/version output)
+			first := cmd.Args().First()
+			if first == "setup" || first == "" {
+				return ctx, nil
+			}
+			return ctx, eng.Validate()
+		},
 		Commands: []*cli.Command{
 			newRunCmd(eng),
 			newPsCmd(eng),
@@ -42,6 +53,7 @@ func NewApp() *cli.Command {
 			newSystemCmd(eng),
 			newDaemonCmd(eng),
 			newSandboxCmd(eng),
+			newSetupCmd(eng),
 		},
 	}
 }
