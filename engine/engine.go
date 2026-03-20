@@ -20,6 +20,16 @@ func New(binary string) *Engine {
 	return &Engine{Binary: binary}
 }
 
+func (e *Engine) Validate() error {
+	if _, err := os.Stat(e.Binary); err != nil {
+		if os.IsNotExist(err) {
+			return fmt.Errorf("Apple Container CLI not found at %s. Run 'gocker setup' to install it.", e.Binary)
+		}
+		return fmt.Errorf("cannot access container binary at %s: %w", e.Binary, err)
+	}
+	return nil
+}
+
 func (e *Engine) Exec(ctx context.Context, args ...string) ([]byte, []byte, error) {
 	cmd := exec.CommandContext(ctx, e.Binary, args...)
 	var stdout, stderr bytes.Buffer
