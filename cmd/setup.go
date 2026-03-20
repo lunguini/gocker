@@ -83,12 +83,11 @@ func runSetup(ctx context.Context, eng *engine.Engine) error {
 	}
 
 	// Step 4: Run container system start
-	fmt.Print("Initializing container system... ")
-	if _, stderr, err := eng.Exec(ctx, "system", "start"); err != nil {
-		fmt.Println("X")
-		return fmt.Errorf("container system start failed: %s", string(stderr))
+	fmt.Println("Initializing container system...")
+	if err := eng.ExecInteractive(ctx, "system", "start"); err != nil {
+		return fmt.Errorf("container system start failed: %w", err)
 	}
-	fmt.Println("OK")
+	fmt.Println("Container system OK")
 
 	// Step 5: Create ~/.gocker/ directory
 	fmt.Print("Creating gocker directory... ")
