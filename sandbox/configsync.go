@@ -1,0 +1,83 @@
+package sandbox
+
+import (
+    "fmt"
+    "os"
+    "path/filepath"
+)
+
+type ConfigMount struct {
+    HostPath      string
+    ContainerPath string
+    ReadOnly      bool
+    Optional      bool
+}
+
+func ClaudeConfigMounts(syncConfig, syncState, managedSettings bool) []ConfigMount {
+    home, _ := os.UserHomeDir()
+    var mounts []ConfigMount
+
+    if syncConfig {
+        mounts = append(mounts,
+            ConfigMount{filepath.Join(home, ".claude", "settings.json"), "/root/.claude/settings.json", true, true},
+            ConfigMount{filepath.Join(home, ".claude.md"), "/root/.claude.md", true, true},
+        )
+    }
+
+    if syncState {
+        mounts = append(mounts,
+            ConfigMount{filepath.Join(home, ".claude.json"), "/root/.claude.json", false, true},
+        )
+    }
+
+    if managedSettings {
+        mounts = append(mounts,
+            ConfigMount{"/Library/Application Support/ClaudeCode/managed-settings.json", "/etc/claude-code/managed-settings.json", true, true},
+            ConfigMount{"/Library/Application Support/ClaudeCode/managed-mcp.json", "/etc/claude-code/managed-mcp.json", true, true},
+        )
+    }
+
+    return mounts
+}
+
+func CodexConfigMounts(syncConfig, syncState, managedSettings bool) []ConfigMount {
+    home, _ := os.UserHomeDir()
+    var mounts []ConfigMount
+
+    if syncConfig {
+        mounts = append(mounts,
+            ConfigMount{filepath.Join(home, ".codex"), "/root/.codex", true, true},
+        )
+    }
+
+    return mounts
+}
+
+var agentConfigFuncs = map[string]func(syncConfig, syncState, managedSettings bool) []ConfigMount{
+    "claude": ClaudeConfigMounts,
+    "codex":  CodexConfigMounts,
+}
+
+func GetConfigMounts(agent string, syncConfig, syncState, managedSettings bool) []ConfigMount {
+    if fn, ok := agentConfigFuncs[agent]; ok {
+        return fn(syncConfig, syncState, managedSettings)
+    }
+    return nil
+}
+
+func GenerateMountFlags(mounts []ConfigMount) []string {
+    var flags []string
+    for _, m := range mounts {
+        if m.Optional {
+            if _, err := os.Stat(m.HostPath); os.IsNotExist(err) {
+                continue
+            }
+        }
+        flag := fmt.Sprintf("%s:%s", m.HostPath, m.ContainerPath)
+        if m.ReadOnly {
+            flag += ":ro"
+        }
+        flags = append(flags, "-v", flag)
+    }
+    return flags
+}
