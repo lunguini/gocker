@@ -1,3 +1,7 @@
+<p align="center">
+    <img src="./assets/header.jpg" alt="gocker logo" width="360">
+</p>
+
 # gocker
 
 Docker-compatible CLI and API daemon for [Apple Container](https://github.com/apple/container) on macOS 26+.
