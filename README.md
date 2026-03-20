@@ -9,12 +9,15 @@ Every container runs as a lightweight Linux microVM backed by Apple's `Virtualiz
 - macOS 26+ (Tahoe) on Apple Silicon
 - Apple's `container` CLI
 
+## Install
+
+```bash
+go install github.com/lunguini/gocker@latest
+```
+
 ## Getting Started
 
 ```bash
-# Install gocker
-make install
-
 # Check prerequisites and install Apple Container if needed
 gocker setup
 
