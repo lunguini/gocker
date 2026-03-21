@@ -8,6 +8,17 @@ Docker-compatible CLI and API daemon for [Apple Container](https://github.com/ap
 
 Every container runs as a lightweight Linux microVM backed by Apple's `Virtualization.framework` — hardware-level isolation, not just namespaces.
 
+## Why gocker?
+
+| | Docker Desktop | gocker |
+|---|---|---|
+| **How it works** | Runs a hidden Linux VM, then runs containers inside it | Each container *is* its own lightweight VM — native on Apple Silicon |
+| **Setup** | Download installer, sign in, allocate resources | `gocker setup` — one command, done |
+| **CLI** | `docker run`, `docker ps`, ... | Same commands — just swap `docker` for `gocker` |
+| **AI sandboxing** | `docker sandbox` — requires Docker Desktop | `gocker sandbox run claude ./` — native, no Docker needed |
+| **Overhead** | Docker Desktop daemon, ~2GB RAM idle | Single static binary, no background daemon required |
+| **Isolation** | Process-level (namespaces/cgroups) | Hardware-level (Apple Virtualization.framework) |
+
 ## Requirements
 
 - macOS 26+ (Tahoe) on Apple Silicon
