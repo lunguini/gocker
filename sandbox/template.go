@@ -11,7 +11,7 @@ type AgentTemplate struct {
 var builtinTemplates = map[string]*AgentTemplate{
 	"claude": {
 		Name:        "claude",
-		Image:       "ubuntu:24.04",
+		Image:       "docker.io/adyjay/gocker:claude-latest",
 		EntryCmd:    []string{"claude", "--dangerously-skip-permissions"},
 		EnvVars:     []string{"ANTHROPIC_API_KEY"},
 		DefaultArgs: []string{},

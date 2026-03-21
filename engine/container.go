@@ -62,24 +62,56 @@ func parseContainerListJSON(data []byte) ([]ContainerInfo, error) {
 
 	var result []ContainerInfo
 	for _, c := range containers {
-		info := ContainerInfo{
-			ID:      getString(c, "id", "ID", "Id"),
-			Name:    getString(c, "name", "Name"),
-			Image:   getString(c, "image", "Image"),
-			State:   getString(c, "state", "State", "status", "Status"),
-			Status:  getString(c, "status", "Status", "state", "State"),
-			IP:      getString(c, "ip", "IP", "ipAddress", "IPAddress"),
-			Ports:   getString(c, "ports", "Ports"),
-			Command: getString(c, "command", "Command", "cmd", "Cmd"),
-		}
-		if created := getString(c, "created", "Created", "createdAt", "CreatedAt"); created != "" {
-			if t, err := time.Parse(time.RFC3339, created); err == nil {
-				info.Created = t
-			}
-		}
+		info := containerInfoFromNested(c)
 		result = append(result, info)
 	}
 	return result, nil
+}
+
+// containerInfoFromNested extracts ContainerInfo from Apple's container CLI
+// JSON, which nests most fields under "configuration".
+func containerInfoFromNested(c map[string]any) ContainerInfo {
+	config, _ := c["configuration"].(map[string]any)
+	if config == nil {
+		config = map[string]any{}
+	}
+
+	info := ContainerInfo{
+		ID:     getString(config, "id"),
+		Name:   getString(config, "id"),
+		Status: getString(c, "status"),
+		State:  getString(c, "status"),
+	}
+
+	// Image reference: configuration.image.reference
+	if imgMap, ok := config["image"].(map[string]any); ok {
+		info.Image = getString(imgMap, "reference")
+	}
+
+	// Command: configuration.initProcess.executable
+	if initProc, ok := config["initProcess"].(map[string]any); ok {
+		info.Command = getString(initProc, "executable")
+	}
+
+	// IP: first network's ipv4Address
+	if networks, ok := c["networks"].([]any); ok && len(networks) > 0 {
+		if net, ok := networks[0].(map[string]any); ok {
+			ip := getString(net, "ipv4Address")
+			// Strip CIDR suffix (e.g., "192.168.64.3/24" -> "192.168.64.3")
+			if idx := strings.Index(ip, "/"); idx != -1 {
+				ip = ip[:idx]
+			}
+			info.IP = ip
+		}
+	}
+
+	// Started date: startedDate is a Core Data timestamp (seconds since 2001-01-01)
+	if started, ok := c["startedDate"].(float64); ok {
+		coreDataEpoch := time.Date(2001, 1, 1, 0, 0, 0, 0, time.UTC)
+		info.Created = coreDataEpoch.Add(time.Duration(started * float64(time.Second)))
+	}
+
+	return info
 }
 
 func getString(m map[string]any, keys ...string) string {

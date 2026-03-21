@@ -7,6 +7,8 @@ import (
 	"io"
 	"os"
 	"os/exec"
+	"syscall"
+	"unsafe"
 )
 
 type Engine struct {
@@ -39,11 +41,42 @@ func (e *Engine) Exec(ctx context.Context, args ...string) ([]byte, []byte, erro
 	return stdout.Bytes(), stderr.Bytes(), err
 }
 
+// termState holds a saved copy of the terminal settings.
+type termState struct {
+	termios syscall.Termios
+}
+
+func getTermState(fd int) (*termState, error) {
+	var t syscall.Termios
+	_, _, errno := syscall.Syscall6(syscall.SYS_IOCTL, uintptr(fd), uintptr(syscall.TIOCGETA), uintptr(unsafe.Pointer(&t)), 0, 0, 0)
+	if errno != 0 {
+		return nil, errno
+	}
+	return &termState{termios: t}, nil
+}
+
+func restoreTermState(fd int, state *termState) {
+	syscall.Syscall6(syscall.SYS_IOCTL, uintptr(fd), uintptr(syscall.TIOCSETA), uintptr(unsafe.Pointer(&state.termios)), 0, 0, 0)
+}
+
 func (e *Engine) ExecInteractive(ctx context.Context, args ...string) error {
+	// Save terminal state so we can restore it if the child process crashes
+	fd := int(os.Stdin.Fd())
+	oldState, err := getTermState(fd)
+	if err == nil {
+		defer restoreTermState(fd, oldState)
+	}
+
 	cmd := exec.CommandContext(ctx, e.Binary, args...)
 	cmd.Stdin = os.Stdin
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
+
+	// Let the container CLI inherit the foreground process group so it
+	// can manage the TTY directly (raw mode, signal handling, etc.).
+	// Using Setpgid would put it in a background group, causing SIGTTOU
+	// freezes when the CLI calls tcsetpgrp() during process changes
+	// inside the VM.
 	return cmd.Run()
 }
 

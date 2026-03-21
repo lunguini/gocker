@@ -7,13 +7,13 @@ import (
 	"github.com/urfave/cli/v3"
 )
 
-func NewApp() *cli.Command {
+func NewApp(version string) *cli.Command {
 	eng := engine.New("")
 
 	return &cli.Command{
 		Name:    "gocker",
 		Usage:   "Docker-compatible CLI for Apple Container on macOS",
-		Version: "0.1.0",
+		Version: version,
 		Flags: []cli.Flag{
 			&cli.StringFlag{
 				Name:  "format",

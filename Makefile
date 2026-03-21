@@ -1,8 +1,10 @@
 BINARY := gocker
-VERSION := 0.1.0
+VERSION := $(shell git describe --tags --always --dirty 2>/dev/null || echo "0.2.0")
 LDFLAGS := -ldflags "-X main.version=$(VERSION)"
+DOCKER_REPO := docker.io/adyjay/gocker
+TEMPLATE_DIR := templates/claude
 
-.PHONY: build install test lint clean
+.PHONY: build install test lint clean template-build template-push
 
 build:
 	go build $(LDFLAGS) -o $(BINARY) .
@@ -18,3 +20,13 @@ lint:
 
 clean:
 	rm -f $(BINARY)
+
+template-build:
+	container build \
+		-t $(DOCKER_REPO):claude-$(VERSION) \
+		$(TEMPLATE_DIR)
+	container image tag $(DOCKER_REPO):claude-$(VERSION) $(DOCKER_REPO):claude-latest
+
+template-push: template-build
+	container image push $(DOCKER_REPO):claude-$(VERSION)
+	container image push $(DOCKER_REPO):claude-latest

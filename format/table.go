@@ -35,6 +35,10 @@ func HumanDuration(t time.Time) string {
 }
 
 func TruncateID(id string) string {
+	// Strip algorithm prefix (e.g. "sha256:") like Docker does
+	if i := strings.Index(id, ":"); i != -1 {
+		id = id[i+1:]
+	}
 	if len(id) > 12 {
 		return id[:12]
 	}
