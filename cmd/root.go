@@ -36,6 +36,7 @@ func NewApp(version string) *cli.Command {
 		},
 		Commands: []*cli.Command{
 			newBuildCmd(eng),
+			newComposeCmd(eng),
 			newDaemonCmd(eng),
 			newExecCmd(eng),
 			newImagesCmd(eng),

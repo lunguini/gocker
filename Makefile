@@ -11,6 +11,7 @@ build:
 
 install: build
 	sudo cp $(BINARY) /usr/local/bin/
+	sudo codesign -s - /usr/local/bin/$(BINARY)
 
 test:
 	go test ./...
