@@ -116,6 +116,25 @@ make test      # Run tests
 make lint      # Run linter
 ```
 
+## Roadmap
+
+- [x] Core container commands (`run`, `ps`, `stop`, `rm`, `exec`, `logs`, `inspect`, `start`)
+- [x] Image management (`pull`, `push`, `images`, `rmi`, `build`)
+- [x] Network management (`network create/ls/rm/connect/disconnect`)
+- [x] Volume management (`volume create/ls/rm/inspect`)
+- [x] Docker REST API daemon on Unix socket (`gocker daemon start`)
+- [x] AI sandbox — `gocker sandbox run claude ./` with config sync
+- [x] Auto-setup (`gocker setup` installs Apple Container CLI)
+- [x] Template images published to Docker Hub
+- [ ] Network policy enforcement (`--network-policy deny --allow-host api.anthropic.com`)
+- [ ] `gocker compose up/down/ps/logs` with standard docker-compose.yml
+- [ ] Codex and Gemini sandbox templates
+- [ ] CLAUDE.md auto-generation for sandbox context
+- [ ] Config file support (`~/.gocker/config.json`)
+- [ ] Shell completions (bash, zsh, fish)
+- [ ] Homebrew formula (`brew install gocker`)
+- [ ] GoReleaser + GitHub Actions CI/CD
+
 ## License
 
 Apache 2.0
