@@ -58,22 +58,31 @@ Use `--format json` on any command for JSON output.
 
 ## AI Agent Sandboxing
 
-The killer feature. Run AI agents in hardware-isolated sandboxes with their host configs mounted automatically:
+The killer feature. Run AI agents in hardware-isolated microVMs with host configs synced automatically:
 
 ```bash
-# Run a Claude sandbox
-gocker sandbox run --agent claude --name my-sandbox
+# Run Claude Code in a sandbox (mounts current dir as /workspace)
+gocker sandbox run claude ./
 
-# Run a Codex sandbox
-gocker sandbox run --agent codex --name my-sandbox
+# Run with a custom name
+gocker sandbox run claude ./ --name my-project
+
+# Run in background
+gocker sandbox run claude ./ -d
 
 # Manage sandboxes
 gocker sandbox ls
-gocker sandbox attach my-sandbox
-gocker sandbox logs my-sandbox
-gocker sandbox stop my-sandbox
-gocker sandbox rm my-sandbox
+gocker sandbox attach my-project
+gocker sandbox logs my-project
+gocker sandbox stop my-project
+gocker sandbox rm my-project
 ```
+
+Sandboxes automatically:
+- Mount your workspace into the VM
+- Sync host Claude settings (plugins, marketplaces) with sandbox-safe defaults
+- Forward `ANTHROPIC_API_KEY` from your environment
+- Allocate 4GB memory for Claude Code
 
 ## Docker API Compatibility
 
