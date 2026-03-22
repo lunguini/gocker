@@ -1,0 +1,42 @@
+[
+  {
+    "configuration": {
+      "id": "abc123def456",
+      "name": "web-server",
+      "image": {
+        "reference": "docker.io/library/nginx:latest"
+      },
+      "initProcess": {
+        "executable": "/docker-entrypoint.sh",
+        "arguments": ["nginx", "-g", "daemon off;"]
+      }
+    },
+    "status": "running",
+    "networks": [
+      {
+        "ipv4Address": "192.168.64.3/24"
+      }
+    ],
+    "startedDate": 764188800.0
+  },
+  {
+    "configuration": {
+      "id": "789xyz012abc",
+      "name": "my-database",
+      "image": {
+        "reference": "docker.io/library/postgres:16"
+      },
+      "initProcess": {
+        "executable": "/usr/local/bin/docker-entrypoint.sh",
+        "arguments": ["postgres"]
+      }
+    },
+    "status": "stopped",
+    "networks": [
+      {
+        "ipv4Address": "192.168.64.5/24"
+      }
+    ],
+    "startedDate": 764102400.0
+  }
+]

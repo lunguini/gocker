@@ -4,7 +4,7 @@ LDFLAGS := -ldflags "-X main.version=$(VERSION)"
 DOCKER_REPO := docker.io/adyjay/gocker
 TEMPLATE_DIR := templates/claude
 
-.PHONY: build install test lint clean template-build template-push
+.PHONY: build install test lint clean template-build template-push smoke
 
 build:
 	go build $(LDFLAGS) -o $(BINARY) .
@@ -31,3 +31,6 @@ template-build:
 template-push: template-build
 	container image push $(DOCKER_REPO):claude-$(VERSION)
 	container image push $(DOCKER_REPO):claude-latest
+
+smoke: install
+	@bash test/smoke.sh

@@ -1,0 +1,22 @@
+[
+  {
+    "reference": "docker.io/library/nginx:latest",
+    "descriptor": {
+      "digest": "sha256:a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2",
+      "annotations": {
+        "org.opencontainers.image.created": "2025-01-15T10:00:00Z"
+      }
+    },
+    "fullSize": "28.9 MB"
+  },
+  {
+    "reference": "docker.io/library/postgres:16",
+    "descriptor": {
+      "digest": "sha256:deadbeefcafe1234deadbeefcafe1234deadbeefcafe1234deadbeefcafe1234",
+      "annotations": {
+        "org.opencontainers.image.created": "2025-02-20T15:30:00Z"
+      }
+    },
+    "fullSize": "112.4 MB"
+  }
+]

@@ -1,0 +1,14 @@
+[
+  {
+    "name": "my-data",
+    "driver": "local",
+    "mountpoint": "/var/lib/volumes/my-data",
+    "createdAt": "2025-06-01T12:00:00Z"
+  },
+  {
+    "name": "postgres-vol",
+    "driver": "local",
+    "mountpoint": "/var/lib/volumes/postgres-vol",
+    "createdAt": "2025-06-15T08:30:00Z"
+  }
+]

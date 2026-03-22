@@ -1,0 +1,14 @@
+[
+  {
+    "id": "net-abc123",
+    "name": "bridge",
+    "driver": "bridge",
+    "scope": "local"
+  },
+  {
+    "id": "net-def456",
+    "name": "my-custom-net",
+    "driver": "bridge",
+    "scope": "local"
+  }
+]
