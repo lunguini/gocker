@@ -126,8 +126,10 @@ make lint      # Run linter
 - [x] AI sandbox — `gocker sandbox run claude ./` with config sync
 - [x] Auto-setup (`gocker setup` installs Apple Container CLI)
 - [x] Template images published to Docker Hub
+- [x] `gocker compose up/down/ps/logs/restart` with standard docker-compose.yml
+- [x] Smoke test suite (`make smoke`) for end-to-end CLI validation
+- [x] Golden file parser tests for Apple CLI output format changes
 - [ ] Network policy enforcement (`--network-policy deny --allow-host api.anthropic.com`)
-- [ ] `gocker compose up/down/ps/logs` with standard docker-compose.yml
 - [ ] Codex and Gemini sandbox templates
 - [ ] CLAUDE.md auto-generation for sandbox context
 - [ ] Config file support (`~/.gocker/config.json`)
