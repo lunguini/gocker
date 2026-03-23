@@ -129,6 +129,7 @@ make lint      # Run linter
 - [x] `gocker compose up/down/ps/logs/restart` with standard docker-compose.yml
 - [x] Smoke test suite (`make smoke`) for end-to-end CLI validation
 - [x] Golden file parser tests for Apple CLI output format changes
+- [ ] Configurable VM isolation modes (one-for-all, hybrd - one for docker - one for each sandbox, complete isolation - one per each service)
 - [ ] Network policy enforcement (`--network-policy deny --allow-host api.anthropic.com`)
 - [ ] Codex and Gemini sandbox templates
 - [ ] CLAUDE.md auto-generation for sandbox context
