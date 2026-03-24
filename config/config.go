@@ -57,7 +57,7 @@ func Defaults() *Config {
 			CPUs:   4,
 			Memory: "4G",
 		},
-		Sandbox: Subsystem{
+		Sandbox: SandboxConfig{
 			Isolation: "full",
 		},
 	}
