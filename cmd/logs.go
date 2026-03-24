@@ -7,7 +7,7 @@ import (
 	"github.com/urfave/cli/v3"
 )
 
-func newLogsCmd(eng *engine.Engine) *cli.Command {
+func newLogsCmd(eng engine.Runtime) *cli.Command {
 	return &cli.Command{
 		Name:      "logs",
 		Usage:     "Fetch the logs of a container",

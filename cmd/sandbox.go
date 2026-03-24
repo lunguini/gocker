@@ -6,13 +6,14 @@ import (
 	"os"
 	"path/filepath"
 
+	"github.com/lunguini/gocker/config"
 	"github.com/lunguini/gocker/engine"
 	"github.com/lunguini/gocker/format"
 	"github.com/lunguini/gocker/sandbox"
 	"github.com/urfave/cli/v3"
 )
 
-func newSandboxCmd(eng *engine.Engine) *cli.Command {
+func newSandboxCmd(eng engine.Runtime) *cli.Command {
 	mgr := sandbox.NewManager(eng)
 
 	return &cli.Command{
@@ -56,6 +57,7 @@ func newSandboxCmd(eng *engine.Engine) *cli.Command {
 						name = agent + "-" + filepath.Base(workspace)
 					}
 
+					cfg := config.Load()
 					opts := sandbox.RunOptions{
 						Name:            name,
 						Agent:           agent,
@@ -68,6 +70,7 @@ func newSandboxCmd(eng *engine.Engine) *cli.Command {
 						Detach:          cmd.Bool("detach"),
 						SyncConfig:      cmd.Bool("sync-config"),
 						SyncState:       cmd.Bool("sync-state"),
+						SyncSession:     agent == "claude" && cfg.SyncClaudeSession(),
 						ManagedSettings: !cmd.Bool("no-managed-settings"),
 					}
 

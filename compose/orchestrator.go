@@ -12,10 +12,10 @@ import (
 
 // Orchestrator manages compose project lifecycle.
 type Orchestrator struct {
-	eng *engine.Engine
+	eng engine.Runtime
 }
 
-func NewOrchestrator(eng *engine.Engine) *Orchestrator {
+func NewOrchestrator(eng engine.Runtime) *Orchestrator {
 	return &Orchestrator{eng: eng}
 }
 

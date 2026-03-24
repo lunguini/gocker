@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"strings"
 
@@ -9,7 +10,7 @@ import (
 	"github.com/urfave/cli/v3"
 )
 
-func newRunCmd(eng *engine.Engine) *cli.Command {
+func newRunCmd(eng engine.Runtime) *cli.Command {
 	return &cli.Command{
 		Name:      "run",
 		Usage:     "Run a container",
@@ -27,6 +28,8 @@ func newRunCmd(eng *engine.Engine) *cli.Command {
 			&cli.BoolFlag{Name: "rm", Usage: "Remove container when it exits"},
 			&cli.StringFlag{Name: "network", Usage: "Connect to a network"},
 			&cli.StringFlag{Name: "platform", Usage: "Set platform (e.g., linux/amd64)"},
+			&cli.StringFlag{Name: "restart", Usage: "Restart policy (no, always, on-failure, unless-stopped)"},
+			&cli.StringFlag{Name: "hostname", Aliases: []string{"h"}, Usage: "Container hostname"},
 			&cli.StringFlag{Name: "cpus", Aliases: []string{"c"}, Usage: "Number of CPUs"},
 			&cli.StringFlag{Name: "memory", Aliases: []string{"m"}, Usage: "Memory limit"},
 		},
@@ -78,6 +81,12 @@ func buildRunArgs(cmd *cli.Command) []string {
 	}
 	if platform := cmd.String("platform"); platform != "" {
 		args = append(args, "--platform", platform)
+	}
+	if restart := cmd.String("restart"); restart != "" {
+		fmt.Fprintf(os.Stderr, "Warning: --restart=%s is not supported by Apple Container CLI (ignored). Container will not auto-restart.\n", restart)
+	}
+	if hostname := cmd.String("hostname"); hostname != "" {
+		args = append(args, "--hostname", hostname)
 	}
 	if cpus := cmd.String("cpus"); cpus != "" {
 		args = append(args, "--cpus", cpus)

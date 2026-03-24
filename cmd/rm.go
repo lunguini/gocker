@@ -8,7 +8,7 @@ import (
 	"github.com/urfave/cli/v3"
 )
 
-func newRmCmd(eng *engine.Engine) *cli.Command {
+func newRmCmd(eng engine.Runtime) *cli.Command {
 	return &cli.Command{
 		Name:      "rm",
 		Usage:     "Remove a container",

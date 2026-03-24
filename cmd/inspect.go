@@ -8,7 +8,7 @@ import (
 	"github.com/urfave/cli/v3"
 )
 
-func newInspectCmd(eng *engine.Engine) *cli.Command {
+func newInspectCmd(eng engine.Runtime) *cli.Command {
 	return &cli.Command{
 		Name:      "inspect",
 		Usage:     "Return low-level information on a container",

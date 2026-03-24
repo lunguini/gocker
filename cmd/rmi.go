@@ -8,7 +8,7 @@ import (
 	"github.com/urfave/cli/v3"
 )
 
-func newRmiCmd(eng *engine.Engine) *cli.Command {
+func newRmiCmd(eng engine.Runtime) *cli.Command {
 	return &cli.Command{
 		Name:      "rmi",
 		Usage:     "Remove an image",

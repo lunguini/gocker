@@ -7,7 +7,7 @@ import (
 	"github.com/urfave/cli/v3"
 )
 
-func newExecCmd(eng *engine.Engine) *cli.Command {
+func newExecCmd(eng engine.Runtime) *cli.Command {
 	return &cli.Command{
 		Name:      "exec",
 		Usage:     "Execute a command in a running container",

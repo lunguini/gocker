@@ -10,7 +10,7 @@ import (
 	"github.com/urfave/cli/v3"
 )
 
-func newNetworkCmd(eng *engine.Engine) *cli.Command {
+func newNetworkCmd(eng engine.Runtime) *cli.Command {
 	return &cli.Command{
 		Name:  "network",
 		Usage: "Manage networks",

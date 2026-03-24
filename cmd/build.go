@@ -7,7 +7,7 @@ import (
 	"github.com/urfave/cli/v3"
 )
 
-func newBuildCmd(eng *engine.Engine) *cli.Command {
+func newBuildCmd(eng engine.Runtime) *cli.Command {
 	return &cli.Command{
 		Name:      "build",
 		Usage:     "Build an image from a Dockerfile",

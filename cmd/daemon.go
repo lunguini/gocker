@@ -10,7 +10,9 @@ import (
 	"syscall"
 
 	"github.com/lunguini/gocker/api"
+	"github.com/lunguini/gocker/config"
 	"github.com/lunguini/gocker/engine"
+	"github.com/lunguini/gocker/sharedvm"
 	"github.com/urfave/cli/v3"
 )
 
@@ -19,7 +21,7 @@ func gockerDir() string {
 	return filepath.Join(home, ".gocker")
 }
 
-func newDaemonCmd(eng *engine.Engine) *cli.Command {
+func newDaemonCmd(eng engine.Runtime) *cli.Command {
 	return &cli.Command{
 		Name:  "daemon",
 		Usage: "Manage the gocker API daemon",
@@ -124,7 +126,58 @@ func newDaemonCmd(eng *engine.Engine) *cli.Command {
 					socketPath := filepath.Join(gockerDir(), "gocker.sock")
 					fmt.Printf("Daemon is running (pid %d)\n", pid)
 					fmt.Printf("Socket: %s\n", socketPath)
+
+					// Show shared VM status if configured
+					cfg := config.Load()
+					if cfg.Isolation == "hybrid" || cfg.Isolation == "shared" {
+						vmMgr := sharedvm.NewManager(eng, cfg.SharedVM)
+						vmStatus := vmMgr.Status(ctx)
+						if vmStatus == "" {
+							vmStatus = "not created"
+						}
+						fmt.Printf("Shared VM: %s\n", vmStatus)
+					}
 					return nil
+				},
+			},
+			{
+				Name:  "vm",
+				Usage: "Manage the shared VM",
+				Commands: []*cli.Command{
+					{
+						Name:  "status",
+						Usage: "Show shared VM status",
+						Action: func(ctx context.Context, cmd *cli.Command) error {
+							cfg := config.Load()
+							vmMgr := sharedvm.NewManager(eng, cfg.SharedVM)
+							status := vmMgr.Status(ctx)
+							if status == "" {
+								fmt.Println("Shared VM is not created")
+							} else {
+								fmt.Printf("Shared VM is %s\n", status)
+							}
+							fmt.Printf("Isolation mode: %s\n", cfg.Isolation)
+							return nil
+						},
+					},
+					{
+						Name:  "stop",
+						Usage: "Stop the shared VM",
+						Action: func(ctx context.Context, cmd *cli.Command) error {
+							cfg := config.Load()
+							vmMgr := sharedvm.NewManager(eng, cfg.SharedVM)
+							return vmMgr.Stop(ctx)
+						},
+					},
+					{
+						Name:  "rm",
+						Usage: "Remove the shared VM",
+						Action: func(ctx context.Context, cmd *cli.Command) error {
+							cfg := config.Load()
+							vmMgr := sharedvm.NewManager(eng, cfg.SharedVM)
+							return vmMgr.Remove(ctx)
+						},
+					},
 				},
 			},
 		},

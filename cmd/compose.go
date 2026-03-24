@@ -10,7 +10,7 @@ import (
 	"github.com/urfave/cli/v3"
 )
 
-func newComposeCmd(eng *engine.Engine) *cli.Command {
+func newComposeCmd(eng engine.Runtime) *cli.Command {
 	orch := compose.NewOrchestrator(eng)
 
 	return &cli.Command{

@@ -1,0 +1,30 @@
+package engine
+
+import (
+	"os"
+	"syscall"
+	"unsafe"
+)
+
+type termState struct {
+	termios syscall.Termios
+}
+
+func saveTermState() *termState {
+	fd := int(os.Stdin.Fd())
+	var t syscall.Termios
+	// TCGETS ioctl on Linux
+	_, _, errno := syscall.Syscall(syscall.SYS_IOCTL, uintptr(fd), uintptr(syscall.TCGETS), uintptr(unsafe.Pointer(&t)))
+	if errno != 0 {
+		return nil
+	}
+	return &termState{termios: t}
+}
+
+func restoreTermState(state *termState) {
+	if state == nil {
+		return
+	}
+	fd := int(os.Stdin.Fd())
+	syscall.Syscall(syscall.SYS_IOCTL, uintptr(fd), uintptr(syscall.TCSETS), uintptr(unsafe.Pointer(&state.termios)))
+}

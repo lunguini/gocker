@@ -2,18 +2,59 @@ package cmd
 
 import (
 	"context"
+	"fmt"
+	"os"
 
+	"github.com/lunguini/gocker/config"
 	"github.com/lunguini/gocker/engine"
+	"github.com/lunguini/gocker/sharedvm"
 	"github.com/urfave/cli/v3"
 )
 
 func NewApp(version string) *cli.Command {
-	eng := engine.New("")
+	cfg := config.Load()
+
+	// Auto-detect runtime based on platform and config
+	appleRT, detectErr := engine.DetectRuntime(cfg.RuntimeBinary())
+	if detectErr != nil {
+		appleRT = engine.New("")
+	}
+
+	// Resolve isolation mode and build runtimes
+	isolation := cfg.Isolation
+	if isolation == "" {
+		isolation = "full"
+	}
+
+	// Default: everything uses the direct runtime
+	generalRT := appleRT // for run, ps, exec, stop, rm, etc.
+	composeRT := appleRT // for compose commands
+	sandboxRT := appleRT // for sandbox commands (always full in hybrid)
+
+	// In hybrid/shared mode, create a SharedVM runtime for general + compose
+	if isolation == "hybrid" || isolation == "shared" {
+		mgr := sharedvm.NewManager(appleRT, cfg.SharedVM)
+		sharedRT := sharedvm.NewSharedVMRuntime(mgr, appleRT)
+
+		generalRT = sharedRT
+		composeRT = sharedRT
+
+		// Per-subsystem overrides
+		if cfg.IsolationFor("compose", "") == "full" {
+			composeRT = appleRT
+		}
+
+		// Sandbox: only shared in explicit "shared" mode
+		if cfg.IsolationFor("sandbox", "") == "shared" {
+			sandboxRT = sharedRT
+		}
+	}
 
 	return &cli.Command{
-		Name:    "gocker",
-		Usage:   "Docker-compatible CLI for Apple Container on macOS",
-		Version: version,
+		Name:                  "gocker",
+		Usage:                 "Docker-compatible CLI for Apple Container on macOS",
+		Version:               version,
+		EnableShellCompletion: true,
 		Flags: []cli.Flag{
 			&cli.StringFlag{
 				Name:  "format",
@@ -24,37 +65,47 @@ func NewApp(version string) *cli.Command {
 				Name:  "debug",
 				Usage: "Enable debug output",
 			},
+			&cli.StringFlag{
+				Name:  "isolation",
+				Usage: "Isolation mode: full, hybrid, shared",
+			},
 		},
 		Before: func(ctx context.Context, cmd *cli.Command) (context.Context, error) {
-			// Skip validation for setup (it installs the binary) and
-			// when no subcommand is given (help/version output)
 			first := cmd.Args().First()
-			if first == "setup" || first == "" {
+			if first == "setup" || first == "ai" || first == "" {
 				return ctx, nil
 			}
-			return ctx, eng.Validate()
+
+			// Warn if sandbox isolation is downgraded
+			cliIsolation := cmd.String("isolation")
+			if first == "sandbox" && cfg.IsolationFor("sandbox", cliIsolation) == "shared" {
+				fmt.Fprintln(os.Stderr, "⚠ Running sandbox in shared isolation mode. Agent has kernel-level access to other containers. Use --isolation full for hardware isolation.")
+			}
+
+			return ctx, appleRT.Validate()
 		},
 		Commands: []*cli.Command{
-			newBuildCmd(eng),
-			newComposeCmd(eng),
-			newDaemonCmd(eng),
-			newExecCmd(eng),
-			newImagesCmd(eng),
-			newInspectCmd(eng),
-			newLogsCmd(eng),
-			newNetworkCmd(eng),
-			newPsCmd(eng),
-			newPullCmd(eng),
-			newPushCmd(eng),
-			newRmCmd(eng),
-			newRmiCmd(eng),
-			newRunCmd(eng),
-			newSandboxCmd(eng),
-			newSetupCmd(eng),
-			newStartCmd(eng),
-			newStopCmd(eng),
-			newSystemCmd(eng),
-			newVolumeCmd(eng),
+			newAICmd(generalRT),
+			newBuildCmd(generalRT),
+			newComposeCmd(composeRT),
+			newDaemonCmd(appleRT), // daemon always manages the Apple runtime directly
+			newExecCmd(generalRT),
+			newImagesCmd(generalRT),
+			newInspectCmd(generalRT),
+			newLogsCmd(generalRT),
+			newNetworkCmd(generalRT),
+			newPsCmd(generalRT),
+			newPullCmd(generalRT),
+			newPushCmd(generalRT),
+			newRmCmd(generalRT),
+			newRmiCmd(generalRT),
+			newRunCmd(generalRT),
+			newSandboxCmd(sandboxRT),
+			newSetupCmd(appleRT), // setup always runs directly
+			newStartCmd(generalRT),
+			newStopCmd(generalRT),
+			newSystemCmd(generalRT),
+			newVolumeCmd(generalRT),
 		},
 	}
 }

@@ -10,7 +10,7 @@ import (
 	"github.com/urfave/cli/v3"
 )
 
-func newPsCmd(eng *engine.Engine) *cli.Command {
+func newPsCmd(eng engine.Runtime) *cli.Command {
 	return &cli.Command{
 		Name:  "ps",
 		Usage: "List containers",

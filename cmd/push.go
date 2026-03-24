@@ -7,7 +7,7 @@ import (
 	"github.com/urfave/cli/v3"
 )
 
-func newPushCmd(eng *engine.Engine) *cli.Command {
+func newPushCmd(eng engine.Runtime) *cli.Command {
 	return &cli.Command{
 		Name:      "push",
 		Usage:     "Push an image to a registry",

@@ -8,7 +8,7 @@ import (
 	"github.com/urfave/cli/v3"
 )
 
-func newStopCmd(eng *engine.Engine) *cli.Command {
+func newStopCmd(eng engine.Runtime) *cli.Command {
 	return &cli.Command{
 		Name:      "stop",
 		Usage:     "Stop a running container",

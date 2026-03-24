@@ -1,0 +1,66 @@
+version: 2
+
+builds:
+  - id: gocker
+    main: .
+    binary: gocker
+    ldflags:
+      - -s -w -X main.version={{.Version}}
+    goos:
+      - darwin
+      - linux
+    goarch:
+      - arm64
+      - amd64
+    env:
+      - CGO_ENABLED=0
+
+archives:
+  - id: gocker
+    format: tar.gz
+    name_template: "gocker_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
+
+checksum:
+  name_template: "checksums.txt"
+
+changelog:
+  sort: asc
+  groups:
+    - title: Features
+      regexp: "^.*feat.*$"
+      order: 0
+    - title: Bug Fixes
+      regexp: "^.*fix.*$"
+      order: 1
+    - title: Other
+      order: 999
+  filters:
+    exclude:
+      - "^docs:"
+      - "^test:"
+      - "^chore:"
+
+brews:
+  - name: gocker
+    repository:
+      owner: lunguini
+      name: homebrew-tap
+      token: "{{ .Env.HOMEBREW_TAP_TOKEN }}"
+    directory: Formula
+    homepage: "https://github.com/lunguini/gocker"
+    description: "Docker-compatible CLI for Apple Container on macOS. Hardware-level isolation via Virtualization.framework."
+    license: "Apache-2.0"
+    install: |
+      bin.install "gocker"
+    test: |
+      system "#{bin}/gocker", "--version"
+    dependencies:
+      - name: go
+        type: build
+
+release:
+  github:
+    owner: lunguini
+    name: gocker
+  draft: false
+  prerelease: auto

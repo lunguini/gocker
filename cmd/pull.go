@@ -7,7 +7,7 @@ import (
 	"github.com/urfave/cli/v3"
 )
 
-func newPullCmd(eng *engine.Engine) *cli.Command {
+func newPullCmd(eng engine.Runtime) *cli.Command {
 	return &cli.Command{
 		Name:      "pull",
 		Usage:     "Pull an image from a registry",

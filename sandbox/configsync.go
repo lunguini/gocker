@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 )
 
 type ConfigMount struct {
@@ -60,6 +61,41 @@ func CodexConfigMounts(syncConfig, syncState, managedSettings bool) []ConfigMoun
 var agentConfigFuncs = map[string]func(syncConfig, syncState, managedSettings bool) []ConfigMount{
 	"claude": ClaudeConfigMounts,
 	"codex":  CodexConfigMounts,
+}
+
+// SessionSyncMounts returns mounts that sync the host's Claude Code session
+// into the VM so /resume works across host and sandbox.
+//
+// Claude Code stores sessions at ~/.claude/projects/<path-hash>/ where
+// path-hash is the workspace path with "/" replaced by "-".
+// Host: ~/.claude/projects/-Users-adrian-Projects-myapp/
+// VM:   ~/.claude/projects/-workspace/
+//
+// We mount the host session dir at the VM's expected session path.
+func SessionSyncMounts(hostWorkspace, containerWorkspace string) []ConfigMount {
+	home, _ := os.UserHomeDir()
+	sandboxHome := "/home/sandbox"
+
+	hostHash := pathToHash(hostWorkspace)
+	containerHash := pathToHash(containerWorkspace)
+
+	hostSessionDir := filepath.Join(home, ".claude", "projects", hostHash)
+	containerSessionDir := sandboxHome + "/.claude/projects/" + containerHash
+
+	// Create host session dir if it doesn't exist so sandbox sessions
+	// persist back to the host (enables /resume outside the sandbox)
+	os.MkdirAll(hostSessionDir, 0755)
+
+	return []ConfigMount{
+		{hostSessionDir, containerSessionDir, false, false},
+	}
+}
+
+// pathToHash converts a workspace path to Claude Code's session directory name.
+// /Users/adrian/Projects/myapp → -Users-adrian-Projects-myapp
+func pathToHash(path string) string {
+	path = filepath.Clean(path)
+	return strings.ReplaceAll(path, "/", "-")
 }
 
 func GetConfigMounts(agent string, syncConfig, syncState, managedSettings bool) []ConfigMount {

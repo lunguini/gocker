@@ -14,12 +14,12 @@ import (
 )
 
 type Server struct {
-	eng        *engine.Engine
+	eng        engine.Runtime
 	socketPath string
 	mux        *http.ServeMux
 }
 
-func NewServer(eng *engine.Engine, socketPath string) *Server {
+func NewServer(eng engine.Runtime, socketPath string) *Server {
 	s := &Server{
 		eng:        eng,
 		socketPath: socketPath,

@@ -9,7 +9,7 @@ import (
 	"github.com/urfave/cli/v3"
 )
 
-func newImagesCmd(eng *engine.Engine) *cli.Command {
+func newImagesCmd(eng engine.Runtime) *cli.Command {
 	return &cli.Command{
 		Name:  "images",
 		Usage: "List images",

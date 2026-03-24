@@ -9,7 +9,7 @@ import (
 	"github.com/urfave/cli/v3"
 )
 
-func newSystemCmd(eng *engine.Engine) *cli.Command {
+func newSystemCmd(eng engine.Runtime) *cli.Command {
 	return &cli.Command{
 		Name:  "system",
 		Usage: "Manage gocker system",
@@ -20,7 +20,7 @@ func newSystemCmd(eng *engine.Engine) *cli.Command {
 				Action: func(ctx context.Context, cmd *cli.Command) error {
 					fmt.Println("Gocker version: 0.1.0")
 					fmt.Printf("OS/Arch: %s/%s\n", runtime.GOOS, runtime.GOARCH)
-					fmt.Printf("Container binary: %s\n", eng.Binary)
+					fmt.Printf("Container binary: %s\n", eng.BinaryPath())
 
 					// Get container CLI version
 					stdout, _, err := eng.Exec(ctx, "version")

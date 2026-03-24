@@ -7,10 +7,9 @@ import (
 	"io"
 	"os"
 	"os/exec"
-	"syscall"
-	"unsafe"
 )
 
+// Engine is the Apple Container CLI backend (macOS).
 type Engine struct {
 	Binary string
 }
@@ -20,6 +19,10 @@ func New(binary string) *Engine {
 		binary = "/usr/local/bin/container"
 	}
 	return &Engine{Binary: binary}
+}
+
+func (e *Engine) BinaryPath() string {
+	return e.Binary
 }
 
 func (e *Engine) Validate() error {
@@ -41,30 +44,11 @@ func (e *Engine) Exec(ctx context.Context, args ...string) ([]byte, []byte, erro
 	return stdout.Bytes(), stderr.Bytes(), err
 }
 
-// termState holds a saved copy of the terminal settings.
-type termState struct {
-	termios syscall.Termios
-}
-
-func getTermState(fd int) (*termState, error) {
-	var t syscall.Termios
-	_, _, errno := syscall.Syscall6(syscall.SYS_IOCTL, uintptr(fd), uintptr(syscall.TIOCGETA), uintptr(unsafe.Pointer(&t)), 0, 0, 0)
-	if errno != 0 {
-		return nil, errno
-	}
-	return &termState{termios: t}, nil
-}
-
-func restoreTermState(fd int, state *termState) {
-	syscall.Syscall6(syscall.SYS_IOCTL, uintptr(fd), uintptr(syscall.TIOCSETA), uintptr(unsafe.Pointer(&state.termios)), 0, 0, 0)
-}
-
 func (e *Engine) ExecInteractive(ctx context.Context, args ...string) error {
 	// Save terminal state so we can restore it if the child process crashes
-	fd := int(os.Stdin.Fd())
-	oldState, err := getTermState(fd)
-	if err == nil {
-		defer restoreTermState(fd, oldState)
+	oldState := saveTermState()
+	if oldState != nil {
+		defer restoreTermState(oldState)
 	}
 
 	cmd := exec.CommandContext(ctx, e.Binary, args...)

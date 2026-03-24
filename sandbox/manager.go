@@ -12,7 +12,7 @@ import (
 )
 
 type Manager struct {
-	eng *engine.Engine
+	eng engine.Runtime
 }
 
 type RunOptions struct {
@@ -27,10 +27,11 @@ type RunOptions struct {
 	Detach          bool
 	SyncConfig      bool
 	SyncState       bool
+	SyncSession     bool
 	ManagedSettings bool
 }
 
-func NewManager(eng *engine.Engine) *Manager {
+func NewManager(eng engine.Runtime) *Manager {
 	return &Manager{eng: eng}
 }
 
@@ -124,6 +125,12 @@ func (m *Manager) Run(ctx context.Context, opts RunOptions) error {
 	// Config sync mounts
 	configMounts := GetConfigMounts(opts.Agent, opts.SyncConfig, opts.SyncState, opts.ManagedSettings)
 	args = append(args, GenerateMountFlags(configMounts)...)
+
+	// Session sync — mount host session dir so /resume works across host and sandbox
+	if opts.SyncSession {
+		sessionMounts := SessionSyncMounts(opts.Workspace, "/workspace")
+		args = append(args, GenerateMountFlags(sessionMounts)...)
+	}
 
 	// Image and entry command
 	args = append(args, image)

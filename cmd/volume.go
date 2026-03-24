@@ -10,7 +10,7 @@ import (
 	"github.com/urfave/cli/v3"
 )
 
-func newVolumeCmd(eng *engine.Engine) *cli.Command {
+func newVolumeCmd(eng engine.Runtime) *cli.Command {
 	return &cli.Command{
 		Name:  "volume",
 		Usage: "Manage volumes",

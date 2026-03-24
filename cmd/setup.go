@@ -32,7 +32,7 @@ type ghAsset struct {
 	DownloadURL string `json:"browser_download_url"`
 }
 
-func newSetupCmd(eng *engine.Engine) *cli.Command {
+func newSetupCmd(eng engine.Runtime) *cli.Command {
 	return &cli.Command{
 		Name:  "setup",
 		Usage: "Check prerequisites and install Apple Container",
@@ -42,7 +42,7 @@ func newSetupCmd(eng *engine.Engine) *cli.Command {
 	}
 }
 
-func runSetup(ctx context.Context, eng *engine.Engine) error {
+func runSetup(ctx context.Context, eng engine.Runtime) error {
 	// Step 1: Check macOS version
 	fmt.Print("Checking macOS version... ")
 	verOut, err := exec.CommandContext(ctx, "sw_vers", "-productVersion").Output()
@@ -69,10 +69,10 @@ func runSetup(ctx context.Context, eng *engine.Engine) error {
 
 	// Step 3: Check/install container binary
 	fmt.Print("Checking Apple Container CLI... ")
-	if _, err := os.Stat(eng.Binary); err != nil {
+	if _, err := os.Stat(eng.BinaryPath()); err != nil {
 		if !os.IsNotExist(err) {
 			fmt.Println("X")
-			return fmt.Errorf("cannot access container binary at %s: %w", eng.Binary, err)
+			return fmt.Errorf("cannot access container binary at %s: %w", eng.BinaryPath(), err)
 		}
 		fmt.Println("not found")
 		if err := installContainer(ctx); err != nil {
