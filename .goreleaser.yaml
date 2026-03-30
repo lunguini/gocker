@@ -54,9 +54,7 @@ brews:
       bin.install "gocker"
     test: |
       system "#{bin}/gocker", "--version"
-    dependencies:
-      - name: go
-        type: build
+
 
 release:
   github:

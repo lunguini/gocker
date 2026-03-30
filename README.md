@@ -32,6 +32,11 @@ Every container runs as a lightweight Linux microVM backed by Apple's `Virtualiz
 ## Install
 
 ```bash
+# Homebrew (recommended)
+brew tap lunguini/tap
+brew install gocker
+
+# Or with Go
 go install github.com/lunguini/gocker@latest
 ```
 
