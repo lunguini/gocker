@@ -83,7 +83,7 @@ CLI (urfave/cli v3)  ←→  Docker REST API (Unix socket ~/.gocker/gocker.sock)
 - Claude binary installed at `/home/sandbox/.local/bin/claude` (where Claude Code expects its native binary)
 - Sandbox-required Claude settings (`bypassPermissions`, `skipDangerousModePermissionPrompt`) are baked into the image at `/home/sandbox/.claude/settings.json`
 - Includes: Claude Code (installed directly from GCS), beads (`bd`), ripgrep, fd, git, jq, openssh-client
-- `entrypoint.sh` updates Claude Code synchronously before `exec "$@"` (not in background — replacing the binary while claude is running causes SIGKILL/exit 137)
+- Claude Code handles its own auto-updates at startup — the entrypoint only merges settings, no manual update logic
 - Sandboxes get 4GB memory (`-m 4G`) — Claude Code (Node.js) gets OOM-killed with lower defaults
 
 ### Gocker-Base Image (Shared VM)
