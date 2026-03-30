@@ -1,6 +1,6 @@
 FROM debian:bookworm-slim
 
-ARG NERDCTL_VERSION=2.0.4
+ARG NERDCTL_VERSION=2.2.1
 ARG TARGETARCH
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
@@ -13,12 +13,12 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 
 # Install containerd
-RUN curl -fsSL "https://github.com/containerd/containerd/releases/download/v2.0.4/containerd-2.0.4-linux-${TARGETARCH}.tar.gz" \
+RUN curl -fsSL "https://github.com/containerd/containerd/releases/download/v2.2.2/containerd-2.2.2-linux-${TARGETARCH}.tar.gz" \
     | tar -xz -C /usr/local
 
 # Install runc
 RUN curl -fsSL -o /usr/local/sbin/runc \
-    "https://github.com/opencontainers/runc/releases/download/v1.2.5/runc.${TARGETARCH}" \
+    "https://github.com/opencontainers/runc/releases/download/v1.4.1/runc.${TARGETARCH}" \
     && chmod +x /usr/local/sbin/runc
 
 # Install nerdctl
@@ -27,7 +27,7 @@ RUN curl -fsSL "https://github.com/containerd/nerdctl/releases/download/v${NERDC
 
 # Install CNI plugins (required for container networking)
 RUN mkdir -p /opt/cni/bin \
-    && curl -fsSL "https://github.com/containernetworking/plugins/releases/download/v1.6.2/cni-plugins-linux-${TARGETARCH}-v1.6.2.tgz" \
+    && curl -fsSL "https://github.com/containernetworking/plugins/releases/download/v1.9.1/cni-plugins-linux-${TARGETARCH}-v1.9.1.tgz" \
     | tar -xz -C /opt/cni/bin
 
 # Install gocker (Linux build) — replaced at build time with current version
