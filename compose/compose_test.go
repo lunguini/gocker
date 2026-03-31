@@ -108,7 +108,7 @@ func TestLoad_EnvSubstitution(t *testing.T) {
 func TestLoad_EnvDefault(t *testing.T) {
 	tmpDir := t.TempDir()
 	// Ensure MISSING_VAR_FOR_TEST is not set
-	os.Unsetenv("MISSING_VAR_FOR_TEST")
+	_ = os.Unsetenv("MISSING_VAR_FOR_TEST")
 	composeContent := `services:
   app:
     image: alpine:${MISSING_VAR_FOR_TEST:-fallback}

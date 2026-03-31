@@ -48,7 +48,7 @@ func (s *Server) handleImagePull(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	fmt.Fprintf(w, `{"status":"Downloaded newer image for %s"}`, image)
+	_, _ = fmt.Fprintf(w, `{"status":"Downloaded newer image for %s"}`, image)
 }
 
 func (s *Server) handleImageRemove(w http.ResponseWriter, r *http.Request) {

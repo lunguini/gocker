@@ -70,13 +70,13 @@ func (s *Server) registerRoutes() {
 }
 
 func (s *Server) ListenAndServe(ctx context.Context) error {
-	os.Remove(s.socketPath)
+	_ = os.Remove(s.socketPath)
 
 	listener, err := net.Listen("unix", s.socketPath)
 	if err != nil {
 		return fmt.Errorf("listen: %w", err)
 	}
-	defer listener.Close()
+	defer func() { _ = listener.Close() }()
 
 	_ = os.Chmod(s.socketPath, 0660)
 

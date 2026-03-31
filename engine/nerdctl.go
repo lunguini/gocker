@@ -31,7 +31,7 @@ func (n *NerdctlRuntime) BinaryPath() string {
 func (n *NerdctlRuntime) Validate() error {
 	_, err := exec.LookPath(n.Binary)
 	if err != nil {
-		return fmt.Errorf("nerdctl not found. Install containerd and nerdctl to use gocker on Linux.")
+		return fmt.Errorf("nerdctl not found; install containerd and nerdctl to use gocker on Linux")
 	}
 	return nil
 }

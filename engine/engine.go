@@ -30,7 +30,7 @@ func (e *Engine) BinaryPath() string {
 func (e *Engine) Validate() error {
 	if _, err := os.Stat(e.Binary); err != nil {
 		if os.IsNotExist(err) {
-			return fmt.Errorf("Apple Container CLI not found at %s. Run 'gocker setup' to install it.", e.Binary)
+			return fmt.Errorf("apple container CLI not found at %s; run 'gocker setup' to install it", e.Binary)
 		}
 		return fmt.Errorf("cannot access container binary at %s: %w", e.Binary, err)
 	}
@@ -122,6 +122,6 @@ func (s *streamReader) Read(p []byte) (int, error) {
 }
 
 func (s *streamReader) Close() error {
-	s.reader.Close()
+	_ = s.reader.Close()
 	return s.cmd.Wait()
 }

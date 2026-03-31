@@ -42,8 +42,8 @@ func newDaemonCmd(eng engine.Runtime) *cli.Command {
 					if cmd.Bool("foreground") {
 						pid := os.Getpid()
 						_ = os.WriteFile(pidPath, []byte(strconv.Itoa(pid)), 0644)
-						defer os.Remove(pidPath)
-						defer os.Remove(socketPath)
+						defer func() { _ = os.Remove(pidPath) }()
+						defer func() { _ = os.Remove(socketPath) }()
 
 						fmt.Printf("Starting gocker daemon (pid %d)\n", pid)
 						fmt.Printf("Listening on %s\n", socketPath)
@@ -94,7 +94,7 @@ func newDaemonCmd(eng engine.Runtime) *cli.Command {
 					if err := proc.Signal(syscall.SIGTERM); err != nil {
 						return fmt.Errorf("stopping daemon: %w", err)
 					}
-					os.Remove(pidPath)
+					_ = os.Remove(pidPath)
 					fmt.Println("Daemon stopped")
 					return nil
 				},

@@ -63,7 +63,7 @@ func runSetup(ctx context.Context, eng engine.Runtime) error {
 	fmt.Print("Checking architecture... ")
 	if runtime.GOARCH != "arm64" {
 		fmt.Println("X")
-		return fmt.Errorf("Apple Silicon (arm64) required, found %s", runtime.GOARCH)
+		return fmt.Errorf("apple silicon (arm64) required, found %s", runtime.GOARCH)
 	}
 	fmt.Println("arm64 OK")
 
@@ -117,7 +117,7 @@ func installContainer(ctx context.Context) error {
 	if err != nil {
 		return fmt.Errorf("failed to fetch releases: %w\nInstall manually from %s", err, releasesPageURL)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
 		return fmt.Errorf("GitHub API returned %s\nInstall manually from %s", resp.Status, releasesPageURL)
@@ -138,7 +138,7 @@ func installContainer(ctx context.Context) error {
 	if err != nil {
 		return fmt.Errorf("failed to create temp file: %w", err)
 	}
-	defer os.Remove(tmpFile.Name())
+	defer func() { _ = os.Remove(tmpFile.Name()) }()
 
 	dlReq, err := http.NewRequestWithContext(ctx, http.MethodGet, asset.DownloadURL, nil)
 	if err != nil {
@@ -148,7 +148,7 @@ func installContainer(ctx context.Context) error {
 	if err != nil {
 		return fmt.Errorf("failed to download installer: %w", err)
 	}
-	defer dlResp.Body.Close()
+	defer func() { _ = dlResp.Body.Close() }()
 
 	if dlResp.StatusCode != http.StatusOK {
 		return fmt.Errorf("failed to download installer: HTTP %s", dlResp.Status)

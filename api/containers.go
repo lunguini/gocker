@@ -191,7 +191,7 @@ func (s *Server) handleContainerLogs(w http.ResponseWriter, r *http.Request) {
 			writeError(w, http.StatusInternalServerError, err.Error())
 			return
 		}
-		defer stream.Close()
+		defer func() { _ = stream.Close() }()
 		w.Header().Set("Content-Type", "application/octet-stream")
 		buf := make([]byte, 4096)
 		for {
