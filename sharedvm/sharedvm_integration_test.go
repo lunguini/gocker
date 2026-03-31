@@ -5,6 +5,7 @@ package sharedvm
 import (
 	"context"
 	"testing"
+	"time"
 
 	"github.com/lunguini/gocker/config"
 	"github.com/lunguini/gocker/engine"
@@ -15,6 +16,16 @@ func integrationManager(t *testing.T) *Manager {
 	eng := engine.New("")
 	if err := eng.EnsureSystemRunning(context.Background()); err != nil {
 		t.Fatalf("system not running: %v", err)
+	}
+	// Wait for the system to be fully ready — after a system restart,
+	// the API server may report "running" before it can accept container
+	// operations, causing XPC connection interrupted errors.
+	ctx := context.Background()
+	for range 5 {
+		if _, _, err := eng.Exec(ctx, "list", "--format", "json"); err == nil {
+			break
+		}
+		time.Sleep(time.Second)
 	}
 	return NewManager(eng, config.SharedVM{
 		Image:  "docker.io/adyjay/gocker:base-latest",
