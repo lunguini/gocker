@@ -1,0 +1,71 @@
+name: Tests
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  unit:
+    name: Unit Tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - run: go test ./...
+
+  lint:
+    name: Lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - uses: golangci/golangci-lint-action@v6
+
+  integration-macos:
+    name: Integration (macOS)
+    runs-on: macos-26
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - name: Start container system
+        run: container system start
+      - name: Pull test images
+        run: |
+          container image pull alpine:latest
+          container image pull docker.io/adyjay/gocker:base-latest
+      - name: Run integration tests
+        run: go test -tags integration -timeout 5m -v ./...
+
+  integration-linux:
+    name: Integration (Linux)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - name: Install containerd + nerdctl + CNI
+        run: |
+          # containerd
+          sudo apt-get update && sudo apt-get install -y containerd
+          sudo systemctl start containerd
+
+          # nerdctl
+          NERDCTL_VERSION=$(curl -s https://api.github.com/repos/containerd/nerdctl/releases/latest | jq -r .tag_name)
+          curl -sSL "https://github.com/containerd/nerdctl/releases/download/${NERDCTL_VERSION}/nerdctl-${NERDCTL_VERSION#v}-linux-amd64.tar.gz" | sudo tar -xzf - -C /usr/local/bin
+
+          # CNI plugins
+          CNI_VERSION=$(curl -s https://api.github.com/repos/containernetworking/plugins/releases/latest | jq -r .tag_name)
+          sudo mkdir -p /opt/cni/bin
+          curl -sSL "https://github.com/containernetworking/plugins/releases/download/${CNI_VERSION}/cni-plugins-linux-amd64-${CNI_VERSION}.tgz" | sudo tar -xzf - -C /opt/cni/bin
+      - name: Pull test images
+        run: sudo nerdctl pull alpine:latest
+      - name: Run integration tests
+        run: sudo go test -tags integration -timeout 5m -v ./...

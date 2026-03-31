@@ -3,7 +3,7 @@ VERSION := $(shell git describe --tags --always --dirty 2>/dev/null || echo "0.2
 LDFLAGS := -ldflags "-X main.version=$(VERSION)"
 DOCKER_REPO := docker.io/adyjay/gocker
 
-.PHONY: build build-linux install test lint clean smoke benchmark \
+.PHONY: build build-linux install test test-integration test-all lint clean smoke benchmark \
 	template-build-claude template-push-claude \
 	template-build-base template-push-base \
 	template-build template-push
@@ -20,6 +20,13 @@ install: build
 
 test:
 	go test ./...
+
+test-integration:  ## Run integration tests (requires real container runtime)
+	go test -tags integration -timeout 5m -v ./...
+
+test-all:  ## Run unit + integration tests
+	go test ./...
+	go test -tags integration -timeout 5m -v ./...
 
 lint:
 	golangci-lint run ./...
