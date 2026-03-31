@@ -18,12 +18,12 @@ type VMState struct {
 	Mounts  map[string]string `json:"mounts"` // host path -> VM path
 }
 
-func stateDir() string {
+var stateDir = func() string {
 	home, _ := os.UserHomeDir()
 	return filepath.Join(home, ".gocker", "sharedvm")
 }
 
-func statePath() string {
+var statePath = func() string {
 	return filepath.Join(stateDir(), "state.json")
 }
 
