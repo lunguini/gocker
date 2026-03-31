@@ -67,8 +67,9 @@ func TestIntegration_ContainerLifecycle(t *testing.T) {
 		_ = rt.ContainerRemove(context.Background(), name, true)
 	})
 
-	// Run detached
-	args := []string{"-d", "--name", name, testImage, "sleep", "300"}
+	// Run detached — use sh with trap so the container handles SIGTERM cleanly.
+	// Plain "sleep" ignores SIGTERM on Alpine, causing Apple Container stop to time out.
+	args := []string{"-d", "--name", name, testImage, "sh", "-c", "trap exit TERM; sleep 300 & wait"}
 	if err := rt.ContainerRun(context.Background(), args, false); err != nil {
 		t.Fatalf("ContainerRun failed: %v", err)
 	}
@@ -133,7 +134,7 @@ func TestIntegration_ContainerInspect_JSONStructure(t *testing.T) {
 		_ = rt.ContainerRemove(context.Background(), name, true)
 	})
 
-	args := []string{"-d", "--name", name, testImage, "sleep", "300"}
+	args := []string{"-d", "--name", name, testImage, "sh", "-c", "trap exit TERM; sleep 300 & wait"}
 	if err := rt.ContainerRun(context.Background(), args, false); err != nil {
 		t.Fatalf("ContainerRun failed: %v", err)
 	}
