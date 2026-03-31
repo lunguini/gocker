@@ -19,8 +19,8 @@ func TestLoad_AutoDiscover(t *testing.T) {
 		t.Fatal(err)
 	}
 	origDir, _ := os.Getwd()
-	defer os.Chdir(origDir)
-	os.Chdir(tmpDir)
+	defer func() { _ = os.Chdir(origDir) }()
+	_ = os.Chdir(tmpDir)
 
 	cf, path, err := Load("")
 	if err != nil {
@@ -60,8 +60,8 @@ func TestLoad_ExplicitFile(t *testing.T) {
 func TestLoad_NoFile(t *testing.T) {
 	tmpDir := t.TempDir()
 	origDir, _ := os.Getwd()
-	defer os.Chdir(origDir)
-	os.Chdir(tmpDir)
+	defer func() { _ = os.Chdir(origDir) }()
+	_ = os.Chdir(tmpDir)
 
 	_, _, err := Load("")
 	if err == nil {

@@ -78,7 +78,7 @@ func (s *Server) ListenAndServe(ctx context.Context) error {
 	}
 	defer listener.Close()
 
-	os.Chmod(s.socketPath, 0660)
+	_ = os.Chmod(s.socketPath, 0660)
 
 	srv := &http.Server{Handler: s}
 
@@ -87,7 +87,7 @@ func (s *Server) ListenAndServe(ctx context.Context) error {
 
 	go func() {
 		<-ctx.Done()
-		srv.Shutdown(context.Background())
+		_ = srv.Shutdown(context.Background())
 	}()
 
 	if err := srv.Serve(listener); err != nil && err != http.ErrServerClosed {

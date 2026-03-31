@@ -340,7 +340,7 @@ func (o *Orchestrator) Down(ctx context.Context, opts DownOptions) error {
 	}
 
 	// Clean up state
-	DeleteProject(project)
+	_ = DeleteProject(project)
 	fmt.Printf("\nProject %q is down\n", project)
 	return nil
 }

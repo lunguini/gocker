@@ -147,7 +147,7 @@ func (s *Server) handleContainerInspect(w http.ResponseWriter, r *http.Request) 
 	if err := json.Unmarshal(data, &raw); err != nil {
 		// Return raw if we can't parse
 		w.Header().Set("Content-Type", "application/json")
-		w.Write(data)
+		_, _ = w.Write(data)
 		return
 	}
 
@@ -197,7 +197,7 @@ func (s *Server) handleContainerLogs(w http.ResponseWriter, r *http.Request) {
 		for {
 			n, readErr := stream.Read(buf)
 			if n > 0 {
-				w.Write(buf[:n])
+				_, _ = w.Write(buf[:n])
 				if f, ok := w.(http.Flusher); ok {
 					f.Flush()
 				}
@@ -214,7 +214,7 @@ func (s *Server) handleContainerLogs(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	w.Header().Set("Content-Type", "application/octet-stream")
-	w.Write(stdout)
+	_, _ = w.Write(stdout)
 }
 
 func (s *Server) handleExecCreate(w http.ResponseWriter, r *http.Request) {
@@ -247,7 +247,7 @@ func (s *Server) handleExecStart(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	w.Header().Set("Content-Type", "application/octet-stream")
-	w.Write(stdout)
+	_, _ = w.Write(stdout)
 }
 
 type execEntry struct {

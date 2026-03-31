@@ -21,7 +21,7 @@ func statePath(name string) string {
 
 func SaveProject(p *ProjectState) error {
 	dir := projectDir(p.Name)
-	os.MkdirAll(dir, 0755)
+	_ = os.MkdirAll(dir, 0755)
 	data, err := json.MarshalIndent(p, "", "  ")
 	if err != nil {
 		return err

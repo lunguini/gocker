@@ -84,7 +84,7 @@ func SessionSyncMounts(hostWorkspace, containerWorkspace string) []ConfigMount {
 
 	// Create host session dir if it doesn't exist so sandbox sessions
 	// persist back to the host (enables /resume outside the sandbox)
-	os.MkdirAll(hostSessionDir, 0755)
+	_ = os.MkdirAll(hostSessionDir, 0755)
 
 	return []ConfigMount{
 		{hostSessionDir, containerSessionDir, false, false},

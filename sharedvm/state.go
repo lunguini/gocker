@@ -29,7 +29,7 @@ var statePath = func() string {
 
 func SaveVMState(s *VMState) error {
 	dir := stateDir()
-	os.MkdirAll(dir, 0755)
+	_ = os.MkdirAll(dir, 0755)
 	data, err := json.MarshalIndent(s, "", "  ")
 	if err != nil {
 		return err

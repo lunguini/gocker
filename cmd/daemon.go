@@ -34,14 +34,14 @@ func newDaemonCmd(eng engine.Runtime) *cli.Command {
 				},
 				Action: func(ctx context.Context, cmd *cli.Command) error {
 					dir := gockerDir()
-					os.MkdirAll(dir, 0755)
+					_ = os.MkdirAll(dir, 0755)
 
 					socketPath := filepath.Join(dir, "gocker.sock")
 					pidPath := filepath.Join(dir, "daemon.pid")
 
 					if cmd.Bool("foreground") {
 						pid := os.Getpid()
-						os.WriteFile(pidPath, []byte(strconv.Itoa(pid)), 0644)
+						_ = os.WriteFile(pidPath, []byte(strconv.Itoa(pid)), 0644)
 						defer os.Remove(pidPath)
 						defer os.Remove(socketPath)
 
@@ -70,7 +70,7 @@ func newDaemonCmd(eng engine.Runtime) *cli.Command {
 					}
 					fmt.Printf("Daemon started (pid %d)\n", proc.Pid)
 					fmt.Printf("Socket: %s\n", socketPath)
-					proc.Release()
+					_ = proc.Release()
 					return nil
 				},
 			},

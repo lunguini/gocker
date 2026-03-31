@@ -2,7 +2,6 @@ package engine
 
 import (
 	"context"
-	"fmt"
 	"io"
 )
 
@@ -45,7 +44,7 @@ var _ Runtime = (*MockRuntime)(nil)
 
 func (m *MockRuntime) Validate() error {
 	if m.ValidateFunc == nil {
-		panic(fmt.Sprintf("MockRuntime: Validate called but ValidateFunc is nil"))
+		panic("MockRuntime: Validate called but ValidateFunc is nil")
 	}
 	return m.ValidateFunc()
 }
@@ -59,182 +58,182 @@ func (m *MockRuntime) BinaryPath() string {
 
 func (m *MockRuntime) Exec(ctx context.Context, args ...string) ([]byte, []byte, error) {
 	if m.ExecFunc == nil {
-		panic(fmt.Sprintf("MockRuntime: Exec called but ExecFunc is nil"))
+		panic("MockRuntime: Exec called but ExecFunc is nil")
 	}
 	return m.ExecFunc(ctx, args...)
 }
 
 func (m *MockRuntime) ExecInteractive(ctx context.Context, args ...string) error {
 	if m.ExecInteractiveFunc == nil {
-		panic(fmt.Sprintf("MockRuntime: ExecInteractive called but ExecInteractiveFunc is nil"))
+		panic("MockRuntime: ExecInteractive called but ExecInteractiveFunc is nil")
 	}
 	return m.ExecInteractiveFunc(ctx, args...)
 }
 
 func (m *MockRuntime) ExecStream(ctx context.Context, args ...string) (io.ReadCloser, error) {
 	if m.ExecStreamFunc == nil {
-		panic(fmt.Sprintf("MockRuntime: ExecStream called but ExecStreamFunc is nil"))
+		panic("MockRuntime: ExecStream called but ExecStreamFunc is nil")
 	}
 	return m.ExecStreamFunc(ctx, args...)
 }
 
 func (m *MockRuntime) ContainerRun(ctx context.Context, args []string, interactive bool) error {
 	if m.ContainerRunFunc == nil {
-		panic(fmt.Sprintf("MockRuntime: ContainerRun called but ContainerRunFunc is nil"))
+		panic("MockRuntime: ContainerRun called but ContainerRunFunc is nil")
 	}
 	return m.ContainerRunFunc(ctx, args, interactive)
 }
 
 func (m *MockRuntime) ContainerList(ctx context.Context, all bool) ([]ContainerInfo, error) {
 	if m.ContainerListFunc == nil {
-		panic(fmt.Sprintf("MockRuntime: ContainerList called but ContainerListFunc is nil"))
+		panic("MockRuntime: ContainerList called but ContainerListFunc is nil")
 	}
 	return m.ContainerListFunc(ctx, all)
 }
 
 func (m *MockRuntime) ContainerStop(ctx context.Context, nameOrID string) error {
 	if m.ContainerStopFunc == nil {
-		panic(fmt.Sprintf("MockRuntime: ContainerStop called but ContainerStopFunc is nil"))
+		panic("MockRuntime: ContainerStop called but ContainerStopFunc is nil")
 	}
 	return m.ContainerStopFunc(ctx, nameOrID)
 }
 
 func (m *MockRuntime) ContainerStart(ctx context.Context, nameOrID string) error {
 	if m.ContainerStartFunc == nil {
-		panic(fmt.Sprintf("MockRuntime: ContainerStart called but ContainerStartFunc is nil"))
+		panic("MockRuntime: ContainerStart called but ContainerStartFunc is nil")
 	}
 	return m.ContainerStartFunc(ctx, nameOrID)
 }
 
 func (m *MockRuntime) ContainerRemove(ctx context.Context, nameOrID string, force bool) error {
 	if m.ContainerRemoveFunc == nil {
-		panic(fmt.Sprintf("MockRuntime: ContainerRemove called but ContainerRemoveFunc is nil"))
+		panic("MockRuntime: ContainerRemove called but ContainerRemoveFunc is nil")
 	}
 	return m.ContainerRemoveFunc(ctx, nameOrID, force)
 }
 
 func (m *MockRuntime) ContainerExec(ctx context.Context, nameOrID string, args []string, interactive bool) error {
 	if m.ContainerExecFunc == nil {
-		panic(fmt.Sprintf("MockRuntime: ContainerExec called but ContainerExecFunc is nil"))
+		panic("MockRuntime: ContainerExec called but ContainerExecFunc is nil")
 	}
 	return m.ContainerExecFunc(ctx, nameOrID, args, interactive)
 }
 
 func (m *MockRuntime) ContainerLogs(ctx context.Context, nameOrID string, follow bool) error {
 	if m.ContainerLogsFunc == nil {
-		panic(fmt.Sprintf("MockRuntime: ContainerLogs called but ContainerLogsFunc is nil"))
+		panic("MockRuntime: ContainerLogs called but ContainerLogsFunc is nil")
 	}
 	return m.ContainerLogsFunc(ctx, nameOrID, follow)
 }
 
 func (m *MockRuntime) ContainerInspect(ctx context.Context, nameOrID string) ([]byte, error) {
 	if m.ContainerInspectFunc == nil {
-		panic(fmt.Sprintf("MockRuntime: ContainerInspect called but ContainerInspectFunc is nil"))
+		panic("MockRuntime: ContainerInspect called but ContainerInspectFunc is nil")
 	}
 	return m.ContainerInspectFunc(ctx, nameOrID)
 }
 
 func (m *MockRuntime) ImagePull(ctx context.Context, image string) error {
 	if m.ImagePullFunc == nil {
-		panic(fmt.Sprintf("MockRuntime: ImagePull called but ImagePullFunc is nil"))
+		panic("MockRuntime: ImagePull called but ImagePullFunc is nil")
 	}
 	return m.ImagePullFunc(ctx, image)
 }
 
 func (m *MockRuntime) ImagePush(ctx context.Context, image string) error {
 	if m.ImagePushFunc == nil {
-		panic(fmt.Sprintf("MockRuntime: ImagePush called but ImagePushFunc is nil"))
+		panic("MockRuntime: ImagePush called but ImagePushFunc is nil")
 	}
 	return m.ImagePushFunc(ctx, image)
 }
 
 func (m *MockRuntime) ImageList(ctx context.Context) ([]ImageInfo, error) {
 	if m.ImageListFunc == nil {
-		panic(fmt.Sprintf("MockRuntime: ImageList called but ImageListFunc is nil"))
+		panic("MockRuntime: ImageList called but ImageListFunc is nil")
 	}
 	return m.ImageListFunc(ctx)
 }
 
 func (m *MockRuntime) ImageRemove(ctx context.Context, image string) error {
 	if m.ImageRemoveFunc == nil {
-		panic(fmt.Sprintf("MockRuntime: ImageRemove called but ImageRemoveFunc is nil"))
+		panic("MockRuntime: ImageRemove called but ImageRemoveFunc is nil")
 	}
 	return m.ImageRemoveFunc(ctx, image)
 }
 
 func (m *MockRuntime) ImageBuild(ctx context.Context, args []string) error {
 	if m.ImageBuildFunc == nil {
-		panic(fmt.Sprintf("MockRuntime: ImageBuild called but ImageBuildFunc is nil"))
+		panic("MockRuntime: ImageBuild called but ImageBuildFunc is nil")
 	}
 	return m.ImageBuildFunc(ctx, args)
 }
 
 func (m *MockRuntime) NetworkCreate(ctx context.Context, name string) error {
 	if m.NetworkCreateFunc == nil {
-		panic(fmt.Sprintf("MockRuntime: NetworkCreate called but NetworkCreateFunc is nil"))
+		panic("MockRuntime: NetworkCreate called but NetworkCreateFunc is nil")
 	}
 	return m.NetworkCreateFunc(ctx, name)
 }
 
 func (m *MockRuntime) NetworkList(ctx context.Context) ([]NetworkInfo, error) {
 	if m.NetworkListFunc == nil {
-		panic(fmt.Sprintf("MockRuntime: NetworkList called but NetworkListFunc is nil"))
+		panic("MockRuntime: NetworkList called but NetworkListFunc is nil")
 	}
 	return m.NetworkListFunc(ctx)
 }
 
 func (m *MockRuntime) NetworkRemove(ctx context.Context, name string) error {
 	if m.NetworkRemoveFunc == nil {
-		panic(fmt.Sprintf("MockRuntime: NetworkRemove called but NetworkRemoveFunc is nil"))
+		panic("MockRuntime: NetworkRemove called but NetworkRemoveFunc is nil")
 	}
 	return m.NetworkRemoveFunc(ctx, name)
 }
 
 func (m *MockRuntime) NetworkConnect(ctx context.Context, network, container string) error {
 	if m.NetworkConnectFunc == nil {
-		panic(fmt.Sprintf("MockRuntime: NetworkConnect called but NetworkConnectFunc is nil"))
+		panic("MockRuntime: NetworkConnect called but NetworkConnectFunc is nil")
 	}
 	return m.NetworkConnectFunc(ctx, network, container)
 }
 
 func (m *MockRuntime) NetworkDisconnect(ctx context.Context, network, container string) error {
 	if m.NetworkDisconnectFunc == nil {
-		panic(fmt.Sprintf("MockRuntime: NetworkDisconnect called but NetworkDisconnectFunc is nil"))
+		panic("MockRuntime: NetworkDisconnect called but NetworkDisconnectFunc is nil")
 	}
 	return m.NetworkDisconnectFunc(ctx, network, container)
 }
 
 func (m *MockRuntime) NetworkInspect(ctx context.Context, name string) ([]byte, error) {
 	if m.NetworkInspectFunc == nil {
-		panic(fmt.Sprintf("MockRuntime: NetworkInspect called but NetworkInspectFunc is nil"))
+		panic("MockRuntime: NetworkInspect called but NetworkInspectFunc is nil")
 	}
 	return m.NetworkInspectFunc(ctx, name)
 }
 
 func (m *MockRuntime) VolumeCreate(ctx context.Context, name string) error {
 	if m.VolumeCreateFunc == nil {
-		panic(fmt.Sprintf("MockRuntime: VolumeCreate called but VolumeCreateFunc is nil"))
+		panic("MockRuntime: VolumeCreate called but VolumeCreateFunc is nil")
 	}
 	return m.VolumeCreateFunc(ctx, name)
 }
 
 func (m *MockRuntime) VolumeList(ctx context.Context) ([]VolumeInfo, error) {
 	if m.VolumeListFunc == nil {
-		panic(fmt.Sprintf("MockRuntime: VolumeList called but VolumeListFunc is nil"))
+		panic("MockRuntime: VolumeList called but VolumeListFunc is nil")
 	}
 	return m.VolumeListFunc(ctx)
 }
 
 func (m *MockRuntime) VolumeRemove(ctx context.Context, name string) error {
 	if m.VolumeRemoveFunc == nil {
-		panic(fmt.Sprintf("MockRuntime: VolumeRemove called but VolumeRemoveFunc is nil"))
+		panic("MockRuntime: VolumeRemove called but VolumeRemoveFunc is nil")
 	}
 	return m.VolumeRemoveFunc(ctx, name)
 }
 
 func (m *MockRuntime) VolumeInspect(ctx context.Context, name string) ([]byte, error) {
 	if m.VolumeInspectFunc == nil {
-		panic(fmt.Sprintf("MockRuntime: VolumeInspect called but VolumeInspectFunc is nil"))
+		panic("MockRuntime: VolumeInspect called but VolumeInspectFunc is nil")
 	}
 	return m.VolumeInspectFunc(ctx, name)
 }

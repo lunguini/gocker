@@ -35,7 +35,7 @@ func (s *Server) handleNetworkInspect(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	w.Header().Set("Content-Type", "application/json")
-	w.Write(data)
+	_, _ = w.Write(data)
 }
 
 func (s *Server) handleNetworkCreate(w http.ResponseWriter, r *http.Request) {

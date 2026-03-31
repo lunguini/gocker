@@ -67,7 +67,7 @@ func (m *Manager) EnsureRunning(ctx context.Context) error {
 		Created: time.Now(),
 		Mounts:  m.mounts,
 	}
-	SaveVMState(state)
+	_ = SaveVMState(state)
 
 	fmt.Fprintln(os.Stderr, "Shared VM is ready")
 	return nil
@@ -112,7 +112,7 @@ func (m *Manager) Remove(ctx context.Context) error {
 	if err := m.apple.ContainerRemove(ctx, vmName, true); err != nil {
 		fmt.Fprintf(os.Stderr, "Warning: %v\n", err)
 	}
-	DeleteVMState()
+	_ = DeleteVMState()
 	fmt.Println("Shared VM removed")
 	return nil
 }
@@ -158,5 +158,5 @@ func (m *Manager) updateState(status string) {
 		state = &VMState{Name: vmName, Image: m.config.Image, Created: time.Now()}
 	}
 	state.Status = status
-	SaveVMState(state)
+	_ = SaveVMState(state)
 }

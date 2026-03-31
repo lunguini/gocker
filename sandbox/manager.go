@@ -51,7 +51,7 @@ func (m *Manager) Run(ctx context.Context, opts RunOptions) error {
 				return fmt.Errorf("starting sandbox container: %w", err)
 			}
 			existing.Status = "running"
-			SaveState(existing)
+			_ = SaveState(existing)
 			if !opts.Detach {
 				return m.Attach(ctx, opts.Name)
 			}
@@ -59,7 +59,7 @@ func (m *Manager) Run(ctx context.Context, opts RunOptions) error {
 		default:
 			// Container gone — clean up stale state and recreate
 			fmt.Printf("Sandbox %q has stale state, recreating...\n", opts.Name)
-			DeleteState(opts.Name)
+			_ = DeleteState(opts.Name)
 		}
 	}
 
@@ -169,7 +169,7 @@ func (m *Manager) Run(ctx context.Context, opts RunOptions) error {
 		AllowedHosts:  opts.AllowedHosts,
 		ContainerIP:   containerIP,
 	}
-	SaveState(state)
+	_ = SaveState(state)
 
 	fmt.Printf("Sandbox %q created\n", opts.Name)
 	return nil

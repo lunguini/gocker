@@ -30,7 +30,7 @@ func statePath(name string) string {
 
 func SaveState(s *SandboxState) error {
 	dir := sandboxDir()
-	os.MkdirAll(dir, 0755)
+	_ = os.MkdirAll(dir, 0755)
 	data, err := json.MarshalIndent(s, "", "  ")
 	if err != nil {
 		return err
