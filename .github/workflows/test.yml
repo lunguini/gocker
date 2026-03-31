@@ -38,14 +38,16 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          # Download the latest signed installer from apple/container releases
-          ASSET_URL=$(gh api repos/apple/container/releases/latest \
-            --jq '.assets[] | select(.name | endswith("-installer-signed.pkg")) | .browser_download_url')
+          # Find the most recent release that has a signed installer pkg
+          # (some releases like v0.11.0 have no binary assets)
+          ASSET_URL=$(gh api repos/apple/container/releases --paginate \
+            --jq '.[].assets[] | select(.name | endswith("installer-signed.pkg")) | .browser_download_url' \
+            | head -1)
           if [ -z "$ASSET_URL" ]; then
-            echo "Failed to find installer asset URL"
-            gh api repos/apple/container/releases/latest --jq '.assets[].name'
+            echo "No installer-signed.pkg found in any release"
             exit 1
           fi
+          echo "Downloading: $ASSET_URL"
           curl -sSL -o /tmp/container.pkg "$ASSET_URL"
           sudo installer -pkg /tmp/container.pkg -target /
       - name: Start container system
