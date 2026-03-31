@@ -7,6 +7,8 @@ import (
 	"io"
 	"os"
 	"os/exec"
+	"strings"
+	"time"
 )
 
 // Engine is the Apple Container CLI backend (macOS).
@@ -33,6 +35,39 @@ func (e *Engine) Validate() error {
 		return fmt.Errorf("cannot access container binary at %s: %w", e.Binary, err)
 	}
 	return nil
+}
+
+// EnsureSystemRunning checks whether the Apple Container system service is
+// active and starts it automatically if it isn't. This prevents the confusing
+// "XPC connection error: Connection invalid" message users see when the service
+// has been stopped (e.g. after a reboot).
+func (e *Engine) EnsureSystemRunning(ctx context.Context) error {
+	// Probe with `container system status` — exit 0 means it's running.
+	stdout, stderr, err := e.Exec(ctx, "system", "status")
+	if err == nil {
+		return nil
+	}
+
+	// Only auto-start if the failure looks like a stopped/disconnected service.
+	// The status message may appear on stdout or stderr depending on the version.
+	combined := string(stdout) + string(stderr)
+	if !strings.Contains(combined, "not running") && !strings.Contains(combined, "XPC") && !strings.Contains(combined, "Connection invalid") {
+		return nil // Different error — let it surface naturally later.
+	}
+
+	fmt.Fprintln(os.Stderr, "Container system service is not running. Starting it...")
+	if startErr := e.ExecInteractive(ctx, "system", "start"); startErr != nil {
+		return fmt.Errorf("failed to start container system service: %w (run 'container system start' manually)", startErr)
+	}
+
+	// Give the service a moment to become ready and verify.
+	for range 10 {
+		if _, _, probeErr := e.Exec(ctx, "system", "status"); probeErr == nil {
+			return nil
+		}
+		time.Sleep(time.Second)
+	}
+	return fmt.Errorf("container system service started but is not responding — try 'container system start' manually")
 }
 
 func (e *Engine) Exec(ctx context.Context, args ...string) ([]byte, []byte, error) {

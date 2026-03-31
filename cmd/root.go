@@ -82,7 +82,18 @@ func NewApp(version string) *cli.Command {
 				fmt.Fprintln(os.Stderr, "⚠ Running sandbox in shared isolation mode. Agent has kernel-level access to other containers. Use --isolation full for hardware isolation.")
 			}
 
-			return ctx, appleRT.Validate()
+			if err := appleRT.Validate(); err != nil {
+				return ctx, err
+			}
+
+			// Auto-start Apple Container system service if it's not running.
+			if eng, ok := appleRT.(*engine.Engine); ok {
+				if err := eng.EnsureSystemRunning(ctx); err != nil {
+					return ctx, err
+				}
+			}
+
+			return ctx, nil
 		},
 		Commands: []*cli.Command{
 			newAICmd(generalRT),

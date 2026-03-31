@@ -127,9 +127,13 @@ func (m *Manager) getContainerStatus(ctx context.Context) string {
 	if err != nil {
 		return ""
 	}
+	// Apple's inspect output may be a JSON array or a single object.
 	var raw map[string]any
 	if json.Unmarshal(data, &raw) != nil {
-		return ""
+		var arr []map[string]any
+		if json.Unmarshal(data, &arr) == nil && len(arr) > 0 {
+			raw = arr[0]
+		}
 	}
 	if status, ok := raw["status"].(string); ok {
 		return status
