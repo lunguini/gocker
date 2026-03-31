@@ -34,6 +34,13 @@ jobs:
       - uses: actions/setup-go@v5
         with:
           go-version-file: go.mod
+      - name: Install Apple Container CLI
+        run: |
+          # Download the latest signed installer from apple/container releases
+          ASSET_URL=$(curl -s https://api.github.com/repos/apple/container/releases/latest \
+            | jq -r '.assets[] | select(.name | endswith("-installer-signed.pkg")) | .browser_download_url')
+          curl -sSL -o /tmp/container.pkg "$ASSET_URL"
+          sudo installer -pkg /tmp/container.pkg -target /
       - name: Start container system
         run: container system start
       - name: Pull test images
