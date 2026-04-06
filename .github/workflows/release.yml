@@ -21,17 +21,35 @@ jobs:
         with:
           go-version: "1.24"
 
-      - name: Extract release notes from CHANGELOG.md
-        run: |
-          VERSION=${GITHUB_REF_NAME#v}
-          # Extract the section for this version (between its header and the next ## header)
-          awk "/^## v${VERSION}$/{found=1; next} /^## /{if(found) exit} found{print}" CHANGELOG.md > release-notes.md
-
       - name: Run GoReleaser
         uses: goreleaser/goreleaser-action@v6
         with:
           version: "~> v2"
-          args: release --clean --release-notes release-notes.md
+          args: release --clean
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           HOMEBREW_TAP_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+
+      - name: Generate CHANGELOG.md from tags
+        run: |
+          echo "# Changelog" > CHANGELOG.md
+          echo "" >> CHANGELOG.md
+          # Iterate over all tags newest-first, generating a section per tag
+          for tag in $(git tag --sort=-v:refname); do
+            prev=$(git describe --tags --abbrev=0 "${tag}^" 2>/dev/null || git rev-list --max-parents=0 HEAD)
+            echo "## ${tag}" >> CHANGELOG.md
+            echo "" >> CHANGELOG.md
+            git log --pretty=format:"- %s" "${prev}..${tag}" >> CHANGELOG.md
+            echo "" >> CHANGELOG.md
+            echo "" >> CHANGELOG.md
+          done
+
+      - name: Commit CHANGELOG.md
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git checkout main
+          git add CHANGELOG.md
+          git diff --cached --quiet && exit 0
+          git commit -m "docs: update CHANGELOG.md for ${GITHUB_REF_NAME}"
+          git push origin main
