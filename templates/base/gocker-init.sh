@@ -21,10 +21,32 @@ fi
 
 echo "containerd is ready (pid $CONTAINERD_PID)"
 
-# Trap shutdown signals to cleanly stop containerd
+# Start gocker daemon with Docker-compatible socket so tools like Portainer
+# can connect to /var/run/docker.sock inside the VM.
+echo "Starting gocker daemon..."
+gocker daemon start --foreground --socket /var/run/docker.sock &
+GOCKER_PID=$!
+
+# Wait for the socket to appear
+for i in $(seq 1 15); do
+    if [ -S /var/run/docker.sock ]; then
+        break
+    fi
+    sleep 0.5
+done
+
+if [ -S /var/run/docker.sock ]; then
+    echo "gocker daemon is ready (pid $GOCKER_PID)"
+else
+    echo "WARNING: gocker daemon socket not ready yet, continuing anyway"
+fi
+
+# Trap shutdown signals to cleanly stop both processes
 cleanup() {
     echo "Shutting down..."
+    kill "$GOCKER_PID" 2>/dev/null
     kill "$CONTAINERD_PID" 2>/dev/null
+    wait "$GOCKER_PID" 2>/dev/null
     wait "$CONTAINERD_PID" 2>/dev/null
 }
 trap cleanup SIGTERM SIGINT

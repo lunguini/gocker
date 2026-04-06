@@ -103,20 +103,15 @@ func (n *NerdctlRuntime) ContainerList(ctx context.Context, all bool) ([]Contain
 
 func ParseNerdctlContainerList(data []byte) ([]ContainerInfo, error) {
 	trimmed := strings.TrimSpace(string(data))
-	if trimmed == "" {
+	if trimmed == "" || trimmed == "[]" {
 		return nil, nil
 	}
 
+	// Collect raw JSON objects — try JSON array first, then newline-delimited
+	objects := parseJSONObjects([]byte(trimmed))
+
 	var result []ContainerInfo
-	for _, line := range strings.Split(trimmed, "\n") {
-		line = strings.TrimSpace(line)
-		if line == "" {
-			continue
-		}
-		var obj map[string]any
-		if err := json.Unmarshal([]byte(line), &obj); err != nil {
-			continue
-		}
+	for _, obj := range objects {
 		info := ContainerInfo{
 			ID:      getString(obj, "ID", "id"),
 			Name:    getString(obj, "Names", "Name", "name"),
@@ -230,20 +225,14 @@ func (n *NerdctlRuntime) ImageList(ctx context.Context) ([]ImageInfo, error) {
 
 func ParseNerdctlImageList(data []byte) ([]ImageInfo, error) {
 	trimmed := strings.TrimSpace(string(data))
-	if trimmed == "" {
+	if trimmed == "" || trimmed == "[]" {
 		return nil, nil
 	}
 
+	objects := parseJSONObjects([]byte(trimmed))
+
 	var result []ImageInfo
-	for _, line := range strings.Split(trimmed, "\n") {
-		line = strings.TrimSpace(line)
-		if line == "" {
-			continue
-		}
-		var obj map[string]any
-		if err := json.Unmarshal([]byte(line), &obj); err != nil {
-			continue
-		}
+	for _, obj := range objects {
 		info := ImageInfo{
 			ID:   getString(obj, "ID", "id"),
 			Name: getString(obj, "Repository", "repository", "Name", "name"),
@@ -296,19 +285,14 @@ func (n *NerdctlRuntime) NetworkList(ctx context.Context) ([]NetworkInfo, error)
 
 func ParseNerdctlNetworkList(data []byte) ([]NetworkInfo, error) {
 	trimmed := strings.TrimSpace(string(data))
-	if trimmed == "" {
+	if trimmed == "" || trimmed == "[]" {
 		return nil, nil
 	}
+
+	objects := parseJSONObjects([]byte(trimmed))
+
 	var result []NetworkInfo
-	for _, line := range strings.Split(trimmed, "\n") {
-		line = strings.TrimSpace(line)
-		if line == "" {
-			continue
-		}
-		var obj map[string]any
-		if err := json.Unmarshal([]byte(line), &obj); err != nil {
-			continue
-		}
+	for _, obj := range objects {
 		result = append(result, NetworkInfo{
 			ID:     getString(obj, "ID", "id"),
 			Name:   getString(obj, "Name", "name"),
@@ -371,19 +355,14 @@ func (n *NerdctlRuntime) VolumeList(ctx context.Context) ([]VolumeInfo, error) {
 
 func ParseNerdctlVolumeList(data []byte) ([]VolumeInfo, error) {
 	trimmed := strings.TrimSpace(string(data))
-	if trimmed == "" {
+	if trimmed == "" || trimmed == "[]" {
 		return nil, nil
 	}
+
+	objects := parseJSONObjects([]byte(trimmed))
+
 	var result []VolumeInfo
-	for _, line := range strings.Split(trimmed, "\n") {
-		line = strings.TrimSpace(line)
-		if line == "" {
-			continue
-		}
-		var obj map[string]any
-		if err := json.Unmarshal([]byte(line), &obj); err != nil {
-			continue
-		}
+	for _, obj := range objects {
 		info := VolumeInfo{
 			Name:       getString(obj, "Name", "name"),
 			Driver:     getString(obj, "Driver", "driver"),
@@ -408,6 +387,33 @@ func (n *NerdctlRuntime) VolumeInspect(ctx context.Context, name string) ([]byte
 		return nil, fmt.Errorf("%s: %w", strings.TrimSpace(string(stderr)), err)
 	}
 	return stdout, nil
+}
+
+// parseJSONObjects handles both JSON arrays and newline-delimited JSON objects.
+// gocker's --format json outputs a JSON array; nerdctl outputs one JSON object per line.
+func parseJSONObjects(data []byte) []map[string]any {
+	trimmed := strings.TrimSpace(string(data))
+
+	// Try JSON array first
+	var arr []map[string]any
+	if err := json.Unmarshal([]byte(trimmed), &arr); err == nil {
+		return arr
+	}
+
+	// Fall back to newline-delimited JSON objects
+	var objects []map[string]any
+	for _, line := range strings.Split(trimmed, "\n") {
+		line = strings.TrimSpace(line)
+		if line == "" {
+			continue
+		}
+		var obj map[string]any
+		if err := json.Unmarshal([]byte(line), &obj); err != nil {
+			continue
+		}
+		objects = append(objects, obj)
+	}
+	return objects
 }
 
 // Compile-time check that NerdctlRuntime implements Runtime.

@@ -6,6 +6,8 @@ import (
 	"io"
 	"strings"
 
+	"os"
+
 	"github.com/lunguini/gocker/engine"
 )
 
@@ -76,6 +78,13 @@ func (s *SharedVMRuntime) ContainerRun(ctx context.Context, args []string, inter
 	if out != "" {
 		fmt.Println(out)
 	}
+
+	// If ports were published, tell the user how to reach them.
+	if hasPortFlag(translated) {
+		if ip := s.manager.VMIP(ctx); ip != "" {
+			fmt.Fprintf(os.Stderr, "Ports are accessible via the shared VM at %s (not localhost)\n", ip)
+		}
+	}
 	return nil
 }
 
@@ -83,7 +92,7 @@ func (s *SharedVMRuntime) ContainerList(ctx context.Context, all bool) ([]engine
 	if err := s.manager.EnsureRunning(ctx); err != nil {
 		return nil, err
 	}
-	args := []string{"ps", "--format", "json"}
+	args := []string{"--format", "json", "ps"}
 	if all {
 		args = append(args, "-a")
 	}
@@ -93,7 +102,19 @@ func (s *SharedVMRuntime) ContainerList(ctx context.Context, all bool) ([]engine
 		return nil, fmt.Errorf("%s: %w", strings.TrimSpace(string(stderr)), err)
 	}
 	// Output is from gocker inside VM which uses nerdctl — parse as nerdctl format
-	return engine.ParseNerdctlContainerList(stdout)
+	containers, err2 := engine.ParseNerdctlContainerList(stdout)
+	if err2 != nil {
+		return nil, err2
+	}
+
+	// Rewrite 0.0.0.0 in port bindings to the VM's IP so the output is
+	// directly usable from the host.
+	if ip := s.manager.VMIP(ctx); ip != "" {
+		for i := range containers {
+			containers[i].Ports = strings.ReplaceAll(containers[i].Ports, "0.0.0.0:", ip+":")
+		}
+	}
+	return containers, nil
 }
 
 func (s *SharedVMRuntime) ContainerStop(ctx context.Context, nameOrID string) error {
@@ -192,7 +213,7 @@ func (s *SharedVMRuntime) ImageList(ctx context.Context) ([]engine.ImageInfo, er
 	if err := s.manager.EnsureRunning(ctx); err != nil {
 		return nil, err
 	}
-	vmArgs := s.proxyArgs(false, "images", "--format", "json")
+	vmArgs := s.proxyArgs(false, "--format", "json", "images")
 	stdout, stderr, err := s.apple.Exec(ctx, vmArgs...)
 	if err != nil {
 		return nil, fmt.Errorf("%s: %w", strings.TrimSpace(string(stderr)), err)
@@ -224,7 +245,7 @@ func (s *SharedVMRuntime) NetworkList(ctx context.Context) ([]engine.NetworkInfo
 	if err := s.manager.EnsureRunning(ctx); err != nil {
 		return nil, err
 	}
-	vmArgs := s.proxyArgs(false, "network", "ls", "--format", "json")
+	vmArgs := s.proxyArgs(false, "--format", "json", "network", "ls")
 	stdout, stderr, err := s.apple.Exec(ctx, vmArgs...)
 	if err != nil {
 		return nil, fmt.Errorf("%s: %w", strings.TrimSpace(string(stderr)), err)
@@ -266,7 +287,7 @@ func (s *SharedVMRuntime) VolumeList(ctx context.Context) ([]engine.VolumeInfo, 
 	if err := s.manager.EnsureRunning(ctx); err != nil {
 		return nil, err
 	}
-	vmArgs := s.proxyArgs(false, "volume", "ls", "--format", "json")
+	vmArgs := s.proxyArgs(false, "--format", "json", "volume", "ls")
 	stdout, stderr, err := s.apple.Exec(ctx, vmArgs...)
 	if err != nil {
 		return nil, fmt.Errorf("%s: %w", strings.TrimSpace(string(stderr)), err)
@@ -315,6 +336,16 @@ func (s *SharedVMRuntime) proxySimple(ctx context.Context, gockerArgs ...string)
 		return fmt.Errorf("%s: %w", strings.TrimSpace(string(stderr)), err)
 	}
 	return nil
+}
+
+// hasPortFlag returns true if args contain -p or --publish.
+func hasPortFlag(args []string) bool {
+	for _, a := range args {
+		if a == "-p" || a == "--publish" {
+			return true
+		}
+	}
+	return false
 }
 
 // translateMountArgs scans args for -v/--volume flags and translates host paths

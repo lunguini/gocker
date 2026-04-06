@@ -31,12 +31,16 @@ func newDaemonCmd(eng engine.Runtime) *cli.Command {
 				Usage: "Start the API daemon",
 				Flags: []cli.Flag{
 					&cli.BoolFlag{Name: "foreground", Usage: "Run in foreground"},
+					&cli.StringFlag{Name: "socket", Aliases: []string{"s"}, Usage: "Socket path (default: ~/.gocker/gocker.sock)"},
 				},
 				Action: func(ctx context.Context, cmd *cli.Command) error {
 					dir := gockerDir()
 					_ = os.MkdirAll(dir, 0755)
 
-					socketPath := filepath.Join(dir, "gocker.sock")
+					socketPath := cmd.String("socket")
+					if socketPath == "" {
+						socketPath = filepath.Join(dir, "gocker.sock")
+					}
 					pidPath := filepath.Join(dir, "daemon.pid")
 
 					if cmd.Bool("foreground") {
@@ -56,8 +60,12 @@ func newDaemonCmd(eng engine.Runtime) *cli.Command {
 					if err != nil {
 						return fmt.Errorf("finding executable: %w", err)
 					}
+					reExecArgs := []string{exe, "daemon", "start", "--foreground"}
+					if socketPath != filepath.Join(dir, "gocker.sock") {
+						reExecArgs = append(reExecArgs, "--socket", socketPath)
+					}
 					proc, err := os.StartProcess(exe,
-						[]string{exe, "daemon", "start", "--foreground"},
+						reExecArgs,
 						&os.ProcAttr{
 							Dir:   "/",
 							Env:   os.Environ(),

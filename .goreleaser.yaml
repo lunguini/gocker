@@ -24,21 +24,7 @@ checksum:
   name_template: "checksums.txt"
 
 changelog:
-  sort: asc
-  groups:
-    - title: Features
-      regexp: "^.*feat.*$"
-      order: 0
-    - title: Bug Fixes
-      regexp: "^.*fix.*$"
-      order: 1
-    - title: Other
-      order: 999
-  filters:
-    exclude:
-      - "^docs:"
-      - "^test:"
-      - "^chore:"
+  disable: true
 
 brews:
   - name: gocker

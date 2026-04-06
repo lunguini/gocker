@@ -166,6 +166,37 @@ func (m *Manager) getContainerStatus(ctx context.Context) string {
 	return "unknown"
 }
 
+// VMIP returns the shared VM's IP address, or "" if unavailable.
+func (m *Manager) VMIP(ctx context.Context) string {
+	data, err := m.apple.ContainerInspect(ctx, vmName)
+	if err != nil {
+		return ""
+	}
+	var raw map[string]any
+	if json.Unmarshal(data, &raw) != nil {
+		var arr []map[string]any
+		if json.Unmarshal(data, &arr) == nil && len(arr) > 0 {
+			raw = arr[0]
+		}
+	}
+	if raw == nil {
+		return ""
+	}
+	networks, _ := raw["networks"].([]any)
+	if len(networks) == 0 {
+		return ""
+	}
+	net, _ := networks[0].(map[string]any)
+	if net == nil {
+		return ""
+	}
+	ip, _ := net["ipv4Address"].(string)
+	if idx := strings.Index(ip, "/"); idx != -1 {
+		ip = ip[:idx]
+	}
+	return ip
+}
+
 func (m *Manager) updateState(status string) {
 	state, _ := LoadVMState()
 	if state == nil {
