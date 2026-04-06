@@ -60,6 +60,11 @@ func TestGetContainerStatus_NestedStatusInArray(t *testing.T) {
 }
 
 func TestGetContainerStatus_InspectError(t *testing.T) {
+	tmpDir := t.TempDir()
+	origStateDir := stateDir
+	stateDir = func() string { return tmpDir }
+	defer func() { stateDir = origStateDir }()
+
 	rt := &engine.MockRuntime{
 		ContainerInspectFunc: func(ctx context.Context, nameOrID string) ([]byte, error) {
 			return nil, errors.New("container not found")
@@ -165,6 +170,9 @@ func TestEnsureRunning_Missing_Creates(t *testing.T) {
 		ContainerInspectFunc: func(ctx context.Context, nameOrID string) ([]byte, error) {
 			return nil, errors.New("no such container")
 		},
+		ExecFunc: func(ctx context.Context, args ...string) ([]byte, []byte, error) {
+			return nil, nil, errors.New("container not running")
+		},
 		ContainerRemoveFunc: func(ctx context.Context, nameOrID string, force bool) error {
 			removeCalled = true
 			return nil
@@ -202,6 +210,9 @@ func TestEnsureRunning_CreateFails_CleansUp(t *testing.T) {
 		ContainerInspectFunc: func(ctx context.Context, nameOrID string) ([]byte, error) {
 			return nil, errors.New("no such container")
 		},
+		ExecFunc: func(ctx context.Context, args ...string) ([]byte, []byte, error) {
+			return nil, nil, errors.New("container not running")
+		},
 		ContainerRemoveFunc: func(ctx context.Context, nameOrID string, force bool) error {
 			removeCount++
 			return nil
@@ -221,6 +232,39 @@ func TestEnsureRunning_CreateFails_CleansUp(t *testing.T) {
 	// First remove is orphan cleanup, second is failure cleanup
 	if removeCount < 2 {
 		t.Errorf("expected ContainerRemove called at least 2 times, got %d", removeCount)
+	}
+}
+
+func TestEnsureRunning_InspectFails_ProbeSucceeds_SkipsCreate(t *testing.T) {
+	tmpDir := t.TempDir()
+	origStateDir := stateDir
+	stateDir = func() string { return tmpDir }
+	defer func() { stateDir = origStateDir }()
+
+	// Pre-populate state file saying VM is running
+	_ = SaveVMState(&VMState{Name: vmName, Status: "running", Image: "test"})
+
+	var createCalled bool
+	rt := &engine.MockRuntime{
+		ContainerInspectFunc: func(ctx context.Context, nameOrID string) ([]byte, error) {
+			return nil, errors.New("transient error")
+		},
+		ExecFunc: func(ctx context.Context, args ...string) ([]byte, []byte, error) {
+			// Probe succeeds — VM is actually alive
+			return nil, nil, nil
+		},
+		ContainerRunFunc: func(ctx context.Context, args []string, interactive bool) error {
+			createCalled = true
+			return nil
+		},
+	}
+	m := newTestManager(rt)
+	err := m.EnsureRunning(context.Background())
+	if err != nil {
+		t.Errorf("expected nil error, got %v", err)
+	}
+	if createCalled {
+		t.Error("expected ContainerRun NOT to be called when probe succeeds")
 	}
 }
 

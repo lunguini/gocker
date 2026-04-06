@@ -48,7 +48,14 @@ func (m *Manager) EnsureRunning(ctx context.Context) error {
 		return nil
 	}
 
-	// VM doesn't exist — create it
+	// VM doesn't exist — create it.
+	// Double-check with a direct exec probe before destroying anything,
+	// in case inspect/parse failed but the VM is actually alive.
+	if _, _, probeErr := m.apple.Exec(ctx, "exec", vmName, "true"); probeErr == nil {
+		m.updateState("running")
+		return nil
+	}
+
 	fmt.Fprintln(os.Stderr, "Creating shared VM...")
 
 	// Clean up any orphaned VM
@@ -125,6 +132,13 @@ func (m *Manager) Status(ctx context.Context) string {
 func (m *Manager) getContainerStatus(ctx context.Context) string {
 	data, err := m.apple.ContainerInspect(ctx, vmName)
 	if err != nil {
+		// Inspect failed — could be transient. If state file says running,
+		// probe with a lightweight exec to avoid nuking a healthy VM.
+		if state, _ := LoadVMState(); state != nil && state.Status == "running" {
+			if _, _, probeErr := m.apple.Exec(ctx, "exec", vmName, "true"); probeErr == nil {
+				return "running"
+			}
+		}
 		return ""
 	}
 	// Apple's inspect output may be a JSON array or a single object.
