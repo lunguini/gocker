@@ -26,5 +26,5 @@ func restoreTermState(state *termState) {
 		return
 	}
 	fd := int(os.Stdin.Fd())
-	syscall.Syscall(syscall.SYS_IOCTL, uintptr(fd), uintptr(syscall.TCSETS), uintptr(unsafe.Pointer(&state.termios)))
+	_, _, _ = syscall.Syscall(syscall.SYS_IOCTL, uintptr(fd), uintptr(syscall.TCSETS), uintptr(unsafe.Pointer(&state.termios)))
 }

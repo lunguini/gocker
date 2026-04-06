@@ -51,7 +51,7 @@ jobs:
           curl -sSL -o /tmp/container.pkg "$ASSET_URL"
           sudo installer -pkg /tmp/container.pkg -target /
       - name: Start container system
-        run: container system start
+        run: yes | container system start
       - name: Pull test images
         run: |
           container image pull alpine:latest
