@@ -27,6 +27,23 @@ func setupRuntime(t *testing.T) Runtime {
 	}
 }
 
+// requireVirtualization skips the test if the platform cannot create VMs
+// (e.g. GitHub Actions macOS runners lack Virtualization.framework support).
+func requireVirtualization(t *testing.T, rt Runtime) {
+	t.Helper()
+	if runtime.GOOS != "darwin" {
+		return
+	}
+	// Probe by trying to run a trivial container — if virtualization is
+	// unavailable the error will mention VZErrorDomain.
+	const probe = "gocker-virt-probe"
+	err := rt.ContainerRun(context.Background(), []string{"-d", "--name", probe, "alpine:latest", "true"}, false)
+	_ = rt.ContainerRemove(context.Background(), probe, true)
+	if err != nil && strings.Contains(err.Error(), "Virtualization is not available") {
+		t.Skip("skipping: Virtualization.framework not available on this hardware")
+	}
+}
+
 func TestIntegration_PullImage(t *testing.T) {
 	rt := setupRuntime(t)
 
@@ -53,6 +70,7 @@ func TestIntegration_PullImage(t *testing.T) {
 
 func TestIntegration_ContainerLifecycle(t *testing.T) {
 	rt := setupRuntime(t)
+	requireVirtualization(t, rt)
 	const name = "gocker-test-lifecycle"
 
 	// Pull image first
@@ -122,6 +140,7 @@ func TestIntegration_ContainerLifecycle(t *testing.T) {
 
 func TestIntegration_ContainerInspect_JSONStructure(t *testing.T) {
 	rt := setupRuntime(t)
+	requireVirtualization(t, rt)
 	const name = "gocker-test-inspect"
 
 	if err := rt.ImagePull(context.Background(), testImage); err != nil {
