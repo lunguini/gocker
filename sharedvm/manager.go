@@ -67,6 +67,21 @@ func (m *Manager) EnsureRunning(ctx context.Context) error {
 		return fmt.Errorf("creating shared VM: %w", err)
 	}
 
+	// Wait for the VM to be ready — the init script needs time to start
+	// containerd (and the gocker daemon) before we can exec into it.
+	ready := false
+	for range 30 {
+		if _, _, err := m.apple.Exec(ctx, "exec", vmName, "true"); err == nil {
+			ready = true
+			break
+		}
+		time.Sleep(time.Second)
+	}
+	if !ready {
+		_ = m.apple.ContainerRemove(ctx, vmName, true)
+		return fmt.Errorf("shared VM created but not responding — try again")
+	}
+
 	state := &VMState{
 		Name:    vmName,
 		Status:  "running",

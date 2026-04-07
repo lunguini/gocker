@@ -171,6 +171,11 @@ func TestEnsureRunning_Missing_Creates(t *testing.T) {
 			return nil, errors.New("no such container")
 		},
 		ExecFunc: func(ctx context.Context, args ...string) ([]byte, []byte, error) {
+			// Before ContainerRun: probe fails (VM doesn't exist).
+			// After ContainerRun: readiness probe succeeds (VM is up).
+			if runCalled {
+				return nil, nil, nil
+			}
 			return nil, nil, errors.New("container not running")
 		},
 		ContainerRemoveFunc: func(ctx context.Context, nameOrID string, force bool) error {
