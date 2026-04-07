@@ -27,20 +27,13 @@ func setupRuntime(t *testing.T) Runtime {
 	}
 }
 
-// requireVirtualization skips the test if the platform cannot create VMs
-// (e.g. GitHub Actions macOS runners lack Virtualization.framework support).
-func requireVirtualization(t *testing.T, rt Runtime) {
+// skipIfNoVirtualization checks an error from ContainerRun and skips the test
+// if it indicates that Virtualization.framework hardware is unavailable
+// (e.g. on GitHub Actions macOS runners).
+func skipIfNoVirtualization(t *testing.T, err error) {
 	t.Helper()
-	if runtime.GOOS != "darwin" {
-		return
-	}
-	// Probe by trying to run a trivial container — if virtualization is
-	// unavailable the error will mention VZErrorDomain.
-	const probe = "gocker-virt-probe"
-	err := rt.ContainerRun(context.Background(), []string{"-d", "--name", probe, "alpine:latest", "true"}, false)
-	_ = rt.ContainerRemove(context.Background(), probe, true)
-	if err != nil && strings.Contains(err.Error(), "Virtualization is not available") {
-		t.Skip("skipping: Virtualization.framework not available on this hardware")
+	if err != nil && strings.Contains(err.Error(), "Virtualization") {
+		t.Skipf("skipping: %v", err)
 	}
 }
 
@@ -70,7 +63,6 @@ func TestIntegration_PullImage(t *testing.T) {
 
 func TestIntegration_ContainerLifecycle(t *testing.T) {
 	rt := setupRuntime(t)
-	requireVirtualization(t, rt)
 	const name = "gocker-test-lifecycle"
 
 	// Pull image first
@@ -89,6 +81,7 @@ func TestIntegration_ContainerLifecycle(t *testing.T) {
 	// Plain "sleep" ignores SIGTERM on Alpine, causing Apple Container stop to time out.
 	args := []string{"-d", "--name", name, testImage, "sh", "-c", "trap exit TERM; sleep 300 & wait"}
 	if err := rt.ContainerRun(context.Background(), args, false); err != nil {
+		skipIfNoVirtualization(t, err)
 		t.Fatalf("ContainerRun failed: %v", err)
 	}
 
@@ -140,7 +133,6 @@ func TestIntegration_ContainerLifecycle(t *testing.T) {
 
 func TestIntegration_ContainerInspect_JSONStructure(t *testing.T) {
 	rt := setupRuntime(t)
-	requireVirtualization(t, rt)
 	const name = "gocker-test-inspect"
 
 	if err := rt.ImagePull(context.Background(), testImage); err != nil {
@@ -155,6 +147,7 @@ func TestIntegration_ContainerInspect_JSONStructure(t *testing.T) {
 
 	args := []string{"-d", "--name", name, testImage, "sh", "-c", "trap exit TERM; sleep 300 & wait"}
 	if err := rt.ContainerRun(context.Background(), args, false); err != nil {
+		skipIfNoVirtualization(t, err)
 		t.Fatalf("ContainerRun failed: %v", err)
 	}
 

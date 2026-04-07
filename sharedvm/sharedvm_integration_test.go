@@ -29,18 +29,17 @@ func integrationManager(t *testing.T) *Manager {
 		time.Sleep(time.Second)
 	}
 
-	// Skip if virtualization hardware is not available (e.g. GitHub Actions runners)
-	const probe = "gocker-virt-probe"
-	err := eng.ContainerRun(ctx, []string{"-d", "--name", probe, "alpine:latest", "true"}, false)
-	_ = eng.ContainerRemove(ctx, probe, true)
-	if err != nil && strings.Contains(err.Error(), "Virtualization is not available") {
-		t.Skip("skipping: Virtualization.framework not available on this hardware")
-	}
-
 	return NewManager(eng, config.SharedVM{
 		Image:  "docker.io/adyjay/gocker:base-latest",
 		Memory: "2G",
 	})
+}
+
+func skipIfNoVirtualization(t *testing.T, err error) {
+	t.Helper()
+	if err != nil && strings.Contains(err.Error(), "Virtualization") {
+		t.Skipf("skipping: %v", err)
+	}
 }
 
 func TestIntegration_SharedVM_CreateAndStatus(t *testing.T) {
@@ -55,6 +54,7 @@ func TestIntegration_SharedVM_CreateAndStatus(t *testing.T) {
 	})
 
 	if err := m.EnsureRunning(ctx); err != nil {
+		skipIfNoVirtualization(t, err)
 		t.Fatalf("EnsureRunning failed: %v", err)
 	}
 
@@ -75,6 +75,7 @@ func TestIntegration_SharedVM_StopAndRestart(t *testing.T) {
 	})
 
 	if err := m.EnsureRunning(ctx); err != nil {
+		skipIfNoVirtualization(t, err)
 		t.Fatalf("EnsureRunning failed: %v", err)
 	}
 
@@ -113,6 +114,7 @@ func TestIntegration_SharedVM_RemoveAndRecreate(t *testing.T) {
 	})
 
 	if err := m.EnsureRunning(ctx); err != nil {
+		skipIfNoVirtualization(t, err)
 		t.Fatalf("first EnsureRunning failed: %v", err)
 	}
 
@@ -146,6 +148,7 @@ func TestIntegration_GetContainerStatus_RealInspect(t *testing.T) {
 	})
 
 	if err := m.EnsureRunning(ctx); err != nil {
+		skipIfNoVirtualization(t, err)
 		t.Fatalf("EnsureRunning failed: %v", err)
 	}
 
