@@ -186,6 +186,32 @@ func newDaemonCmd(eng engine.Runtime) *cli.Command {
 							return vmMgr.Remove(ctx)
 						},
 					},
+					{
+						Name:  "update",
+						Usage: "Pull the latest base image and recreate the shared VM",
+						Action: func(ctx context.Context, cmd *cli.Command) error {
+							cfg := config.Load()
+							vmMgr := sharedvm.NewManager(eng, cfg.SharedVM)
+
+							// Remove existing VM
+							fmt.Println("Removing shared VM...")
+							_ = vmMgr.Remove(ctx)
+
+							// Pull latest base image via the host runtime
+							image := cfg.SharedVM.Image
+							if image == "" {
+								image = "docker.io/adyjay/gocker:base-latest"
+							}
+							fmt.Printf("Pulling %s...\n", image)
+							if err := eng.ImagePull(ctx, image); err != nil {
+								return fmt.Errorf("pulling base image: %w", err)
+							}
+
+							// Recreate VM
+							fmt.Println("Recreating shared VM...")
+							return vmMgr.EnsureRunning(ctx)
+						},
+					},
 				},
 			},
 		},
