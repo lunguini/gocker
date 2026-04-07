@@ -1,5 +1,13 @@
 # Changelog
 
+## v0.5.3
+
+- fix: save changelog before checkout main in release workflow
+- chore: untrack CHANGELOG.local.md, keep only auto-generated CHANGELOG.md
+- ignore local changelog
+- fix: skip VM integration tests at point of failure, not via probe
+- docs: update CHANGELOG.md for v0.5.2
+
 ## v0.5.2
 
 - fix: changelog generation script for oldest tag with no predecessor
