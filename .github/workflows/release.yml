@@ -34,11 +34,18 @@ jobs:
         run: |
           echo "# Changelog" > CHANGELOG.md
           echo "" >> CHANGELOG.md
-          # Iterate over all tags newest-first, generating a section per tag
-          for tag in $(git tag --sort=-v:refname); do
-            prev=$(git describe --tags --abbrev=0 "${tag}^" 2>/dev/null || git rev-list --max-parents=0 HEAD)
+          tags=($(git tag --sort=-v:refname))
+          for i in "${!tags[@]}"; do
+            tag="${tags[$i]}"
             echo "## ${tag}" >> CHANGELOG.md
             echo "" >> CHANGELOG.md
+            # Next older tag, or root commit if this is the oldest tag
+            next_idx=$((i + 1))
+            if [ "$next_idx" -lt "${#tags[@]}" ]; then
+              prev="${tags[$next_idx]}"
+            else
+              prev=$(git rev-list --max-parents=0 HEAD | head -1)
+            fi
             git log --pretty=format:"- %s" "${prev}..${tag}" >> CHANGELOG.md
             echo "" >> CHANGELOG.md
             echo "" >> CHANGELOG.md
