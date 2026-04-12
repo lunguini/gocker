@@ -2,6 +2,7 @@ package sharedvm
 
 import (
 	"fmt"
+	"os"
 	"path/filepath"
 	"strings"
 )
@@ -37,6 +38,50 @@ func TranslatePath(hostPath string, mounts map[string]string) (string, bool) {
 		}
 	}
 	return hostPath, false
+}
+
+// blockedMountRoots are directories too broad to auto-mount into the VM.
+var blockedMountRoots = map[string]bool{
+	"/":        true,
+	"/tmp":     true,
+	"/var":     true,
+	"/etc":     true,
+	"/private": true,
+}
+
+// ResolveMountParent determines which directory to mount for a given path.
+// If the path is a directory, it returns that directory.
+// If the path is a file (or doesn't exist), it walks up to find the nearest
+// existing parent directory.
+// Returns an error if the resolved directory is a blocked broad system root.
+func ResolveMountParent(path string) (string, error) {
+	path = filepath.Clean(path)
+
+	// Walk up until we find an existing directory
+	dir := path
+	for {
+		info, err := os.Stat(dir)
+		if err == nil {
+			if info.IsDir() {
+				break
+			}
+			// It's a file — use its parent
+			dir = filepath.Dir(dir)
+			continue
+		}
+		parent := filepath.Dir(dir)
+		if parent == dir {
+			// Reached filesystem root
+			break
+		}
+		dir = parent
+	}
+
+	if blockedMountRoots[dir] {
+		return "", fmt.Errorf("cannot auto-mount %q — too broad. Use a more specific path (e.g., a subdirectory of %s)", dir, dir)
+	}
+
+	return dir, nil
 }
 
 // TranslateVolumeSpec rewrites a volume spec's host path.
