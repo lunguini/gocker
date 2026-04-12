@@ -91,9 +91,11 @@ func (m *Manager) Run(ctx context.Context, opts RunOptions) error {
 
 	// Build run args
 	var args []string
-	if opts.Detach || !opts.Detach {
-		// Always create with -it for sandbox
-		args = append(args, "-i", "-t")
+	if !opts.Detach {
+		args = append(args, "-i")
+		if engine.IsTerminal() {
+			args = append(args, "-t")
+		}
 	}
 	if opts.Detach {
 		args = append(args, "-d")
@@ -137,7 +139,7 @@ func (m *Manager) Run(ctx context.Context, opts RunOptions) error {
 	args = append(args, entryCmd...)
 
 	// Run the container
-	interactive := !opts.Detach
+	interactive := !opts.Detach && engine.IsTerminal()
 	if err := m.eng.ContainerRun(ctx, args, interactive); err != nil {
 		// Clean up orphaned container that may have been registered
 		// by the container CLI before the error occurred
