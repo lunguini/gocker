@@ -66,7 +66,18 @@ func (s *SharedVMRuntime) ContainerRun(ctx context.Context, args []string, inter
 	}
 	translated, unmapped := s.translateMountArgs(args)
 	if len(unmapped) > 0 {
-		return fmt.Errorf("bind mount paths not accessible in shared VM: %v\nAdd parent directories to workspaceDirs in ~/.gocker/config.yaml, or use --isolation full", unmapped)
+		mountDirs, err := s.resolveUnmappedMounts(unmapped)
+		if err != nil {
+			return err
+		}
+		if err := s.manager.ExpandMounts(ctx, mountDirs); err != nil {
+			return err
+		}
+		// Retry translation with expanded mounts
+		translated, unmapped = s.translateMountArgs(args)
+		if len(unmapped) > 0 {
+			return fmt.Errorf("bind mount paths still not accessible after VM expansion: %v", unmapped)
+		}
 	}
 	gockerArgs := append([]string{"run"}, translated...)
 	vmArgs := s.proxyArgs(interactive, gockerArgs...)
@@ -234,7 +245,17 @@ func (s *SharedVMRuntime) ImageBuild(ctx context.Context, args []string) error {
 	}
 	translated, unmapped := s.translateMountArgs(args)
 	if len(unmapped) > 0 {
-		return fmt.Errorf("build paths not accessible in shared VM: %v\nAdd parent directories to workspaceDirs in ~/.gocker/config.yaml, or use --isolation full", unmapped)
+		mountDirs, err := s.resolveUnmappedMounts(unmapped)
+		if err != nil {
+			return err
+		}
+		if err := s.manager.ExpandMounts(ctx, mountDirs); err != nil {
+			return err
+		}
+		translated, unmapped = s.translateMountArgs(args)
+		if len(unmapped) > 0 {
+			return fmt.Errorf("build paths still not accessible after VM expansion: %v", unmapped)
+		}
 	}
 	gockerArgs := append([]string{"build"}, translated...)
 	vmArgs := s.proxyArgs(true, gockerArgs...)
@@ -352,6 +373,24 @@ func hasPortFlag(args []string) bool {
 		}
 	}
 	return false
+}
+
+// resolveUnmappedMounts converts raw unmapped paths to mount directories
+// using ResolveMountParent.
+func (s *SharedVMRuntime) resolveUnmappedMounts(paths []string) ([]string, error) {
+	seen := map[string]bool{}
+	var dirs []string
+	for _, p := range paths {
+		dir, err := ResolveMountParent(p)
+		if err != nil {
+			return nil, err
+		}
+		if !seen[dir] {
+			seen[dir] = true
+			dirs = append(dirs, dir)
+		}
+	}
+	return dirs, nil
 }
 
 // translateMountArgs scans args for -v/--volume flags and translates host paths
