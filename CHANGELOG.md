@@ -1,5 +1,29 @@
 # Changelog
 
+## v0.6.0
+
+- docs: update compatibility matrix and CLAUDE.md for v0.6.0
+- feat: add compose build support and BuildConfig YAML unmarshaler
+- feat: add event publishing and fix Docker API type mismatches
+- feat: rewrite compose as nerdctl proxy, add exec flag passthrough
+- feat: add BuildKit and cgroup v2 delegation to shared VM base image
+- chore: gitignore .DS_Store and cleanup ignore patterns
+- docs: update local changelog with TTY fix and dynamic mount expansion
+- feat: auto-expand VM mounts when bind paths are outside workspace dirs
+- feat: add ExpandMounts to recreate VM with additional bind mounts
+- feat: add ResolveMountParent with broad-directory blocklist
+- feat: translateMountArgs surfaces unmapped paths as errors
+- fix: skip -t flag in sandbox when stdin is not a terminal
+- feat: surface errors from mount path translation
+- feat: add IsTerminal() helper for TTY detection
+- docs: add design spec for TTY-aware sandbox and dynamic mount expansion
+- feat: add gocker daemon vm update and readiness probe after VM creation
+- docs: update CHANGELOG.md for v0.5.3
+
+## v0.5.4
+
+- feat: add gocker daemon vm update and readiness probe after VM creation
+
 ## v0.5.3
 
 - fix: save changelog before checkout main in release workflow
