@@ -1,6 +1,22 @@
 #!/bin/bash
 set -e
 
+# Set up cgroup v2 delegation for nested containers.
+# Enable all available controllers so containerd/runc can apply resource limits.
+echo "Configuring cgroup v2..."
+if [ -f /sys/fs/cgroup/cgroup.subtree_control ]; then
+    # Move all processes out of the root cgroup into an init scope,
+    # so the root cgroup can delegate controllers to children.
+    mkdir -p /sys/fs/cgroup/init
+    for pid in $(cat /sys/fs/cgroup/cgroup.procs 2>/dev/null); do
+        echo "$pid" > /sys/fs/cgroup/init/cgroup.procs 2>/dev/null || true
+    done
+    # Enable all controllers
+    for controller in cpuset cpu io memory pids; do
+        echo "+$controller" > /sys/fs/cgroup/cgroup.subtree_control 2>/dev/null || true
+    done
+fi
+
 # Start containerd in the background
 echo "Starting containerd..."
 containerd &
@@ -20,6 +36,25 @@ if [ ! -S /run/containerd/containerd.sock ]; then
 fi
 
 echo "containerd is ready (pid $CONTAINERD_PID)"
+
+# Start buildkitd in the background (required for nerdctl compose build)
+echo "Starting buildkitd..."
+buildkitd &
+BUILDKIT_PID=$!
+
+# Wait for buildkit socket
+for i in $(seq 1 15); do
+    if [ -S /run/buildkit/buildkitd.sock ]; then
+        break
+    fi
+    sleep 0.5
+done
+
+if [ -S /run/buildkit/buildkitd.sock ]; then
+    echo "buildkitd is ready (pid $BUILDKIT_PID)"
+else
+    echo "WARNING: buildkitd socket not ready yet, continuing anyway"
+fi
 
 # Start gocker daemon with Docker-compatible socket so tools like Portainer
 # can connect to /var/run/docker.sock inside the VM.
@@ -45,8 +80,10 @@ fi
 cleanup() {
     echo "Shutting down..."
     kill "$GOCKER_PID" 2>/dev/null
+    kill "$BUILDKIT_PID" 2>/dev/null
     kill "$CONTAINERD_PID" 2>/dev/null
     wait "$GOCKER_PID" 2>/dev/null
+    wait "$BUILDKIT_PID" 2>/dev/null
     wait "$CONTAINERD_PID" 2>/dev/null
 }
 trap cleanup SIGTERM SIGINT

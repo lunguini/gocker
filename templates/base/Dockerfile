@@ -25,6 +25,11 @@ RUN curl -fsSL -o /usr/local/sbin/runc \
 RUN curl -fsSL "https://github.com/containerd/nerdctl/releases/download/v${NERDCTL_VERSION}/nerdctl-${NERDCTL_VERSION}-linux-${TARGETARCH}.tar.gz" \
     | tar -xz -C /usr/local/bin
 
+# Install BuildKit (required for nerdctl compose build)
+ARG BUILDKIT_VERSION=0.21.1
+RUN curl -fsSL "https://github.com/moby/buildkit/releases/download/v${BUILDKIT_VERSION}/buildkit-v${BUILDKIT_VERSION}.linux-${TARGETARCH}.tar.gz" \
+    | tar -xz -C /usr/local
+
 # Install CNI plugins (required for container networking)
 RUN mkdir -p /opt/cni/bin \
     && curl -fsSL "https://github.com/containernetworking/plugins/releases/download/v1.9.1/cni-plugins-linux-${TARGETARCH}-v1.9.1.tgz" \
