@@ -320,7 +320,7 @@ func (s *SharedVMRuntime) proxyArgs(interactive bool, gockerArgs ...string) []st
 	if interactive {
 		args = append(args, "-i", "-t")
 	}
-	args = append(args, vmName, "gocker")
+	args = append(args, s.manager.Name(), "gocker")
 	args = append(args, gockerArgs...)
 	return args
 }
@@ -355,7 +355,12 @@ func (s *SharedVMRuntime) translateMountArgs(args []string) []string {
 	copy(result, args)
 	for i := 0; i < len(result)-1; i++ {
 		if result[i] == "-v" || result[i] == "--volume" {
-			result[i+1] = TranslateVolumeSpec(result[i+1], s.manager.Mounts())
+			translated, err := TranslateVolumeSpec(result[i+1], s.manager.Mounts())
+			if err != nil {
+				// TODO(Task 4): propagate error to caller
+				continue
+			}
+			result[i+1] = translated
 		}
 	}
 	return result
