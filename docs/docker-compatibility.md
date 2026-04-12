@@ -12,7 +12,7 @@ Status of gocker's compatibility with Docker CLI commands and Engine API endpoin
 
 | Docker Command | gocker | Notes |
 |---|---|---|
-| `docker run` | yes | `-i`, `-t`, `-d`, `--name`, `-p`, `-v`, `-e`, `--env-file`, `-w`, `-m`, `--rm`, `--network`, `--platform`, `-h`, `-c/--cpus` |
+| `docker run` | yes | `-i`, `-t`, `-d`, `--name`, `-p`, `-v`, `-e`, `--env-file`, `-w`, `-m`, `--rm`, `--network`, `--platform`, `-h`, `-c/--cpus`; TTY-aware (skips `-t` when stdin is not a terminal) |
 | `docker run --restart` | partial | flag accepted with warning; Apple CLI ignores it, nerdctl supports it |
 | `docker run --user` | no | gocker CLI doesn't accept this flag |
 | `docker run --pid/--ipc/--uts` | no | gocker CLI doesn't accept these flags |
@@ -30,10 +30,7 @@ Status of gocker's compatibility with Docker CLI commands and Engine API endpoin
 | `docker ps` | yes | `-a/--all`, `-q/--quiet` |
 | `docker ps --filter` | no | |
 | `docker ps --format` | partial | `--format json` only (no Go templates) |
-| `docker exec` | yes | `-i`, `-t` |
-| `docker exec -u/--user` | no | gocker CLI doesn't accept this flag for exec |
-| `docker exec -w/--workdir` | no | gocker CLI doesn't accept this flag for exec |
-| `docker exec -e/--env` | no | gocker CLI doesn't accept this flag for exec |
+| `docker exec` | yes | `-i`, `-t`, `-d`, `-w/--workdir`, `-e/--env`, `-u/--user`; uses `SkipFlagParsing` for full flag passthrough |
 | `docker logs` | yes | `-f/--follow` |
 | `docker logs --tail` | no | |
 | `docker logs --since/--until` | no | |
@@ -104,32 +101,31 @@ Status of gocker's compatibility with Docker CLI commands and Engine API endpoin
 
 | Docker Command | gocker | Notes |
 |---|---|---|
-| `docker compose up` | yes | `-f`, `-d`, `-p/--project-name` |
-| `docker compose down` | yes | `-f`, `-p`, `-v/--volumes` |
-| `docker compose ps` | yes | `-f`, `-p` |
-| `docker compose logs` | yes | `-f`, `-F/--follow` |
-| `docker compose restart` | yes | |
-| `docker compose build` | no | |
-| `docker compose pull` | no | |
-| `docker compose exec` | no | |
-| `docker compose run` | no | |
-| `docker compose stop/start` | no | use `down`/`up` |
-| `docker compose config` | no | |
-| `docker compose top` | no | |
-| `docker compose events` | no | |
-| `docker compose cp` | no | |
-| `docker compose scale` | no | |
-| `docker compose profiles` | no | |
-| `docker compose watch` | no | |
+| `docker compose *` | yes | Full proxy to `nerdctl compose` inside VM; all flags passed through via `SkipFlagParsing` |
+| `docker compose up` | yes | all nerdctl flags; `--wait` silently stripped (unsupported by nerdctl) |
+| `docker compose down` | yes | all nerdctl flags; `--rmi` silently stripped (unsupported by nerdctl) |
+| `docker compose ps` | yes | all nerdctl flags |
+| `docker compose logs` | yes | all nerdctl flags |
+| `docker compose restart` | yes | all nerdctl flags |
+| `docker compose build` | yes | proxied to nerdctl compose build |
+| `docker compose pull` | yes | proxied to nerdctl compose pull |
+| `docker compose exec` | yes | auto-inserts `-T` when stdin is not a terminal |
+| `docker compose run` | yes | proxied to nerdctl compose run |
+| `docker compose stop/start` | yes | proxied to nerdctl compose |
+| `docker compose config` | yes | proxied to nerdctl compose config |
+| `docker compose top` | yes | proxied to nerdctl compose top |
+| `docker compose events` | yes | proxied to nerdctl compose events |
+| `docker compose cp` | yes | proxied to nerdctl compose cp |
+| `docker compose watch` | no | nerdctl compose doesn't support watch |
 
 ### System / Misc
 
 | Docker Command | gocker | Notes |
 |---|---|---|
-| `docker info` | yes | via `gocker system info` |
+| `docker info` | yes | top-level `gocker info` and `gocker system info` |
 | `docker system prune` | yes | removes stopped containers + unused images |
 | `docker version` | partial | `--version` flag; no separate `version` subcommand |
-| `docker events` | no | API-only (`GET /events`) |
+| `docker events` | partial | API-only (`GET /events`); no CLI command yet |
 | `docker system df` | no | |
 | `docker context` | no | not applicable to gocker's architecture |
 | `docker plugin` | no | not applicable to gocker's architecture |
@@ -154,7 +150,7 @@ Status of gocker's compatibility with Docker CLI commands and Engine API endpoin
 | `HEAD /_ping` | yes | |
 | `GET /version` | yes | |
 | `GET /info` | yes | |
-| `GET /events` | yes | `filters` query param (type, event) |
+| `GET /events` | yes | streaming newline-delimited JSON; `filters` query param (type, event); publishes container, image, network, volume events |
 | `GET /system/df` | no | |
 | `POST /auth` | no | |
 
@@ -165,7 +161,7 @@ Status of gocker's compatibility with Docker CLI commands and Engine API endpoin
 | `GET /containers/json` | yes | `all` query param |
 | `GET /containers/json` filters | no | no filter/limit/size params |
 | `POST /containers/create` | yes | `name` query param |
-| `GET /containers/{id}/json` | yes | Docker-compatible format |
+| `GET /containers/{id}/json` | yes | Docker-compatible format; handles Apple CLI array responses |
 | `GET /containers/{id}/top` | no | |
 | `GET /containers/{id}/logs` | yes | `follow` param |
 | `GET /containers/{id}/logs` tail/since | no | |
@@ -205,11 +201,11 @@ Status of gocker's compatibility with Docker CLI commands and Engine API endpoin
 | `GET /images/json` | yes | |
 | `GET /images/json` filters | no | |
 | `POST /images/create` | yes | `fromImage`, `tag` params |
-| `GET /images/{name}/json` | yes | minimal metadata |
+| `GET /images/{name}/json` | yes | minimal metadata; `Created` as RFC3339 string |
 | `GET /images/{name}/history` | no | |
 | `POST /images/{name}/push` | no | CLI-only |
 | `POST /images/{name}/tag` | no | |
-| `DELETE /images/{name}` | yes | |
+| `DELETE /images/{name}` | yes | returns 404 for missing images (not 500) |
 | `GET /images/search` | no | |
 | `POST /images/prune` | no | |
 | `POST /commit` | no | |
@@ -245,12 +241,12 @@ Status of gocker's compatibility with Docker CLI commands and Engine API endpoin
 
 | Category | Yes | Partial | No |
 |---|---|---|---|
-| Container CLI | 10 | 3 | 19 |
+| Container CLI | 10 | 3 | 16 |
 | Image CLI | 5 | 0 | 12 |
 | Network CLI | 6 | 0 | 3 |
 | Volume CLI | 4 | 0 | 2 |
-| Compose CLI | 5 | 0 | 10 |
-| System CLI | 2 | 1 | 10 |
+| Compose CLI | 15 | 0 | 1 |
+| System CLI | 2 | 2 | 9 |
 | Container API | 7 | 0 | 15 |
 | Exec API | 2 | 0 | 2 |
 | Image API | 4 | 0 | 9 |
@@ -264,7 +260,8 @@ Status of gocker's compatibility with Docker CLI commands and Engine API endpoin
 | AI agent sandboxing | `gocker sandbox run/ls/stop/rm/attach/logs` |
 | Prerequisite setup | `gocker setup` |
 | AI-friendly context | `gocker ai` |
-| Daemon VM management | `gocker daemon vm status/stop/rm/update` |
+| Daemon VM management | `gocker daemon vm status/stop/rm/update`; readiness probe after VM creation |
+| Daemon request logging | `gocker daemon start --foreground` rolling terminal display + file logging |
 | Isolation modes | `--isolation full/hybrid/shared` |
 
 ## Architectural Differences
@@ -279,3 +276,4 @@ Status of gocker's compatibility with Docker CLI commands and Engine API endpoin
 | Build | BuildKit | delegates to `container build` or `nerdctl build` |
 | Networking | libnetwork + iptables | delegates to runtime CLI |
 | Volumes | volume drivers | ext4-formatted volumes (Apple), standard volumes (nerdctl) |
+| Bind mounts | any host path | auto-expands VM mounts when bind paths are outside pre-mounted workspace dirs |

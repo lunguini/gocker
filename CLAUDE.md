@@ -56,9 +56,13 @@ CLI (urfave/cli v3)  ←→  Docker REST API (Unix socket ~/.gocker/gocker.sock)
   - `orchestrator.go` — service lifecycle (Up/Down/Ps/Logs/Restart), handles ext4 lost+found via PGDATA injection
   - `project.go` — project state at `~/.gocker/compose/<project>/state.json`
   - `yaml.go` — custom unmarshalers for flexible compose syntax (command as string/list, env as map/list)
-- **`api/`** — Docker Engine REST API on Unix socket. `ServeHTTP` strips `/vX.XX/` prefixes for version-agnostic routing. Uses Go 1.22+ `http.ServeMux` with method+path patterns (`"GET /containers/json"`).
+- **`api/`** — Docker Engine REST API on Unix socket. `ServeHTTP` strips `/vX.XX/` prefixes for version-agnostic routing. Uses Go 1.22+ `http.ServeMux` with method+path patterns (`"GET /containers/json"`). `logging.go` provides rolling terminal display (last N lines) and file-based request logging for `--foreground` mode.
 - **`sandbox/`** — AI agent sandboxing. `Manager` wraps runtime with sandbox lifecycle. State persisted as JSON files in `~/.gocker/sandboxes/<name>.json`. `template.go` has built-in agent templates (claude, codex). `configsync.go` generates mount flags for host agent configs.
 - **`format/`** — output formatting with `text/tabwriter`, JSON output, ID truncation, human-readable durations.
+
+## Docker Alias
+
+The user has `docker` aliased to `gocker` on this system. When tools or scripts call `docker`, they are actually invoking gocker. This means gocker must accept Docker CLI flags and arguments even if the underlying feature isn't fully implemented — unknown flags should be accepted gracefully (ignored with a warning) rather than causing hard errors.
 
 ## Key Design Decisions
 
@@ -73,6 +77,16 @@ CLI (urfave/cli v3)  ←→  Docker REST API (Unix socket ~/.gocker/gocker.sock)
 - **Terminal state protection.** `ExecInteractive()` saves/restores termios state via platform-specific ioctl so the terminal doesn't get stuck in raw mode if a process crashes.
 - **No Setpgid for interactive sessions.** The `container` CLI must stay in the foreground process group to manage its own TTY. Using `Setpgid: true` causes `SIGTTOU` freezes when the CLI calls `tcsetpgrp()` during process changes inside the VM. The `container` CLI handles signal forwarding internally.
 - **Orphaned container cleanup.** `sandbox run` and `compose up` remove any container registered with the CLI but missing from gocker's state (caused by previous failed runs). Also cleans up on failure.
+- **Flag passthrough architecture.** The Runtime interface accepts raw `[]string` args — backends forward them directly to the underlying CLI binary. Feature gaps are almost always in gocker's CLI layer (`cmd/`), not the backend. Adding a flag to `cmd/run.go` is usually sufficient; nerdctl will handle it on Linux, Apple CLI support varies.
+- **Shared/hybrid mode uses standard container isolation.** In shared/hybrid modes, containers run inside the VM via nerdctl/containerd with standard namespace/cgroup isolation — same as Docker. Only full mode provides hardware VM boundaries per container.
+- **Compose proxies to nerdctl, not reimplemented.** Rather than maintaining a custom compose orchestrator, gocker proxies all `compose` commands to `nerdctl compose` inside the shared VM. This gives full Docker Compose compatibility (multi-file, build, profiles, etc.) for free. Raw args are passed through via `SkipFlagParsing` — no flag-by-flag reconstruction. Host paths are translated to VM-internal paths (`/host/...`).
+- **SkipFlagParsing for passthrough commands.** Commands that proxy to another tool (compose, exec) should use `SkipFlagParsing: true` and parse only known flags manually. Otherwise urfave/cli rejects unknown flags (e.g., `bash -c "cmd"` where `-c` is treated as a flag).
+- **Apple `container exec` TTY rules.** Use `-i` (not `-t`) for the outer `container exec` into the VM when the subprocess may not have a TTY. `-t` fails with "Operation not supported by device" when stdin is not a terminal. `-i` alone works for both interactive and non-interactive use. Never combine outer `-t` with inner nerdctl `-T` (no-TTY).
+- **BuildKit runs inside the VM.** BuildKit is Linux-only — no native macOS build. `buildkitd` runs inside the shared VM alongside containerd. The gocker-base image includes BuildKit binaries. Don't use `--oci-worker-no-process-sandbox` (requires rootless mode); plain `buildkitd` works as root.
+- **cgroup v2 delegation for nested containers.** The VM needs cgroup v2 delegation configured in the init script: move processes out of root cgroup into `/sys/fs/cgroup/init`, then enable `+cpuset +cpu +io +memory +pids` on the root's `subtree_control`. Without this, runc fails with "cannot enter cgroupv2 with domain controllers".
+- **Daemon must use isolation-aware runtime.** The API daemon (`gocker daemon start`) must receive the `SharedVMRuntime` in shared/hybrid mode, not the raw `appleRT`. Otherwise API calls (container list, exec, inspect) can't see containers running inside the VM.
+- **Docker API type mismatches.** Docker SDK clients are strict about JSON types. Image inspect `Created` must be an RFC3339 string (not Unix int). Container inspect must return a JSON object (not array). Image delete must return 404 (not 500) for missing images. Always test API responses against the Docker SDK, not just curl.
+- **nerdctl vs Docker flag differences.** nerdctl compose doesn't support `--rmi` (compose down) or `--wait` (compose up). These must be stripped before forwarding. When adding Docker compat flags, check nerdctl support and silently drop unsupported ones.
 
 ## Template Images
 
