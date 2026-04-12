@@ -64,7 +64,10 @@ func (s *SharedVMRuntime) ContainerRun(ctx context.Context, args []string, inter
 	if err := s.manager.EnsureRunning(ctx); err != nil {
 		return err
 	}
-	translated := s.translateMountArgs(args)
+	translated, unmapped := s.translateMountArgs(args)
+	if len(unmapped) > 0 {
+		return fmt.Errorf("bind mount paths not accessible in shared VM: %v\nAdd parent directories to workspaceDirs in ~/.gocker/config.yaml, or use --isolation full", unmapped)
+	}
 	gockerArgs := append([]string{"run"}, translated...)
 	vmArgs := s.proxyArgs(interactive, gockerArgs...)
 	if interactive {
@@ -229,7 +232,10 @@ func (s *SharedVMRuntime) ImageBuild(ctx context.Context, args []string) error {
 	if err := s.manager.EnsureRunning(ctx); err != nil {
 		return err
 	}
-	translated := s.translateMountArgs(args)
+	translated, unmapped := s.translateMountArgs(args)
+	if len(unmapped) > 0 {
+		return fmt.Errorf("build paths not accessible in shared VM: %v\nAdd parent directories to workspaceDirs in ~/.gocker/config.yaml, or use --isolation full", unmapped)
+	}
 	gockerArgs := append([]string{"build"}, translated...)
 	vmArgs := s.proxyArgs(true, gockerArgs...)
 	return s.apple.ExecInteractive(ctx, vmArgs...)
@@ -349,21 +355,25 @@ func hasPortFlag(args []string) bool {
 }
 
 // translateMountArgs scans args for -v/--volume flags and translates host paths
-// to VM-internal paths.
-func (s *SharedVMRuntime) translateMountArgs(args []string) []string {
+// to VM-internal paths. Returns the translated args and any source paths that
+// could not be translated (not covered by existing mounts).
+func (s *SharedVMRuntime) translateMountArgs(args []string) ([]string, []string) {
 	result := make([]string, len(args))
 	copy(result, args)
+	var unmapped []string
 	for i := 0; i < len(result)-1; i++ {
 		if result[i] == "-v" || result[i] == "--volume" {
 			translated, err := TranslateVolumeSpec(result[i+1], s.manager.Mounts())
 			if err != nil {
-				// TODO(Task 4): propagate error to caller
-				continue
+				// Extract the source path for mount expansion
+				parts := strings.SplitN(result[i+1], ":", 2)
+				unmapped = append(unmapped, parts[0])
+			} else {
+				result[i+1] = translated
 			}
-			result[i+1] = translated
 		}
 	}
-	return result
+	return result, unmapped
 }
 
 // Compile-time check.
