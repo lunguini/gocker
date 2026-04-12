@@ -7,6 +7,44 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
+// BuildConfig handles both string and object forms for build directives.
+//
+//	build: ./dir                        → {Context: "./dir"}
+//	build:
+//	  context: ./dir
+//	  dockerfile: Dockerfile.custom     → {Context: "./dir", Dockerfile: "Dockerfile.custom"}
+type BuildConfig struct {
+	Context    string `yaml:"context"`
+	Dockerfile string `yaml:"dockerfile,omitempty"`
+}
+
+func (b *BuildConfig) UnmarshalYAML(value *yaml.Node) error {
+	switch value.Kind {
+	case yaml.ScalarNode:
+		b.Context = value.Value
+		return nil
+	case yaml.MappingNode:
+		// Decode into a temporary struct to avoid infinite recursion.
+		var raw struct {
+			Context    string `yaml:"context"`
+			Dockerfile string `yaml:"dockerfile"`
+		}
+		if err := value.Decode(&raw); err != nil {
+			return err
+		}
+		b.Context = raw.Context
+		b.Dockerfile = raw.Dockerfile
+		return nil
+	default:
+		return fmt.Errorf("build must be a string or map, got %v", value.Kind)
+	}
+}
+
+// IsSet returns true if a build context was specified.
+func (b BuildConfig) IsSet() bool {
+	return b.Context != ""
+}
+
 // CommandOrArgs handles both string and []string forms for command/entrypoint.
 //
 //	command: "echo hello"       → ["echo", "hello"]

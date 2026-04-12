@@ -491,6 +491,49 @@ func (o *Orchestrator) Restart(ctx context.Context, opts RestartOptions) error {
 	return SaveProject(state)
 }
 
+// BuildOptions configures the build command.
+type BuildOptions struct {
+	File    string
+	Project string
+}
+
+// Build builds images for services that have a build directive.
+func (o *Orchestrator) Build(ctx context.Context, opts BuildOptions) error {
+	cf, absFile, err := Load(opts.File)
+	if err != nil {
+		return err
+	}
+
+	project := opts.Project
+	if project == "" {
+		project = ProjectName(absFile)
+	}
+
+	for svcName, svc := range cf.Services {
+		if !svc.Build.IsSet() {
+			continue
+		}
+
+		tag := svc.Image
+		if tag == "" {
+			tag = project + "-" + svcName
+		}
+
+		var args []string
+		args = append(args, "-t", tag)
+		if svc.Build.Dockerfile != "" {
+			args = append(args, "-f", svc.Build.Dockerfile)
+		}
+		args = append(args, svc.Build.Context)
+
+		fmt.Printf("Building %s (%s)...\n", svcName, tag)
+		if err := o.eng.ImageBuild(ctx, args); err != nil {
+			return fmt.Errorf("building %s: %w", svcName, err)
+		}
+	}
+	return nil
+}
+
 func (o *Orchestrator) getContainerStatus(ctx context.Context, nameOrID string) string {
 	data, err := o.eng.ContainerInspect(ctx, nameOrID)
 	if err != nil {

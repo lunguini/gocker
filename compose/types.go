@@ -10,6 +10,7 @@ type ComposeFile struct {
 // Service represents a single service in a compose file.
 type Service struct {
 	Image         string            `yaml:"image"`
+	Build         BuildConfig       `yaml:"build,omitempty"`
 	ContainerName string            `yaml:"container_name,omitempty"`
 	Command       CommandOrArgs     `yaml:"command,omitempty"`
 	Entrypoint    CommandOrArgs     `yaml:"entrypoint,omitempty"`
@@ -25,6 +26,7 @@ type Service struct {
 	Memory        string            `yaml:"mem_limit,omitempty"`
 	CPUs          string            `yaml:"cpus,omitempty"`
 	Labels        map[string]string `yaml:"labels,omitempty"`
+	PullPolicy    string            `yaml:"pull_policy,omitempty"`
 }
 
 // Network represents a top-level network definition.
