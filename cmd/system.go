@@ -9,33 +9,44 @@ import (
 	"github.com/urfave/cli/v3"
 )
 
+func infoAction(eng engine.Runtime) cli.ActionFunc {
+	return func(ctx context.Context, cmd *cli.Command) error {
+		fmt.Println("Gocker version: 0.1.0")
+		fmt.Printf("OS/Arch: %s/%s\n", runtime.GOOS, runtime.GOARCH)
+		fmt.Printf("Container binary: %s\n", eng.BinaryPath())
+
+		stdout, _, err := eng.Exec(ctx, "version")
+		if err == nil {
+			fmt.Printf("Container CLI version: %s", string(stdout))
+		}
+
+		containers, _ := eng.ContainerList(ctx, true)
+		fmt.Printf("Containers: %d\n", len(containers))
+
+		images, _ := eng.ImageList(ctx)
+		fmt.Printf("Images: %d\n", len(images))
+
+		return nil
+	}
+}
+
+func newInfoCmd(eng engine.Runtime) *cli.Command {
+	return &cli.Command{
+		Name:   "info",
+		Usage:  "Display system-wide information",
+		Action: infoAction(eng),
+	}
+}
+
 func newSystemCmd(eng engine.Runtime) *cli.Command {
 	return &cli.Command{
 		Name:  "system",
 		Usage: "Manage gocker system",
 		Commands: []*cli.Command{
 			{
-				Name:  "info",
-				Usage: "Display system-wide information",
-				Action: func(ctx context.Context, cmd *cli.Command) error {
-					fmt.Println("Gocker version: 0.1.0")
-					fmt.Printf("OS/Arch: %s/%s\n", runtime.GOOS, runtime.GOARCH)
-					fmt.Printf("Container binary: %s\n", eng.BinaryPath())
-
-					// Get container CLI version
-					stdout, _, err := eng.Exec(ctx, "version")
-					if err == nil {
-						fmt.Printf("Container CLI version: %s", string(stdout))
-					}
-
-					containers, _ := eng.ContainerList(ctx, true)
-					fmt.Printf("Containers: %d\n", len(containers))
-
-					images, _ := eng.ImageList(ctx)
-					fmt.Printf("Images: %d\n", len(images))
-
-					return nil
-				},
+				Name:   "info",
+				Usage:  "Display system-wide information",
+				Action: infoAction(eng),
 			},
 			{
 				Name:  "prune",

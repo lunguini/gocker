@@ -28,21 +28,14 @@ func NewApp(version string) *cli.Command {
 
 	// Default: everything uses the direct runtime
 	generalRT := appleRT // for run, ps, exec, stop, rm, etc.
-	composeRT := appleRT // for compose commands
 	sandboxRT := appleRT // for sandbox commands (always full in hybrid)
 
-	// In hybrid/shared mode, create a SharedVM runtime for general + compose
+	// In hybrid/shared mode, create a SharedVM runtime for general commands
 	if isolation == "hybrid" || isolation == "shared" {
 		mgr := sharedvm.NewManager(appleRT, cfg.SharedVM)
 		sharedRT := sharedvm.NewSharedVMRuntime(mgr, appleRT)
 
 		generalRT = sharedRT
-		composeRT = sharedRT
-
-		// Per-subsystem overrides
-		if cfg.IsolationFor("compose", "") == "full" {
-			composeRT = appleRT
-		}
 
 		// Sandbox: only shared in explicit "shared" mode
 		if cfg.IsolationFor("sandbox", "") == "shared" {
@@ -98,10 +91,11 @@ func NewApp(version string) *cli.Command {
 		Commands: []*cli.Command{
 			newAICmd(generalRT),
 			newBuildCmd(generalRT),
-			newComposeCmd(composeRT),
-			newDaemonCmd(appleRT), // daemon always manages the Apple runtime directly
+			newComposeCmd(appleRT), // compose proxies to nerdctl inside a VM
+			newDaemonCmd(generalRT), // uses SharedVMRuntime in shared/hybrid mode
 			newExecCmd(generalRT),
 			newImagesCmd(generalRT),
+			newInfoCmd(generalRT),
 			newInspectCmd(generalRT),
 			newLogsCmd(generalRT),
 			newNetworkCmd(generalRT),

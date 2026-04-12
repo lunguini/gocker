@@ -49,9 +49,23 @@ func newDaemonCmd(eng engine.Runtime) *cli.Command {
 						defer func() { _ = os.Remove(pidPath) }()
 						defer func() { _ = os.Remove(socketPath) }()
 
-						fmt.Printf("Starting gocker daemon (pid %d)\n", pid)
-						fmt.Printf("Listening on %s\n", socketPath)
+						logPath := filepath.Join(dir, "daemon.log")
+						logger, err := api.NewLogger(5, logPath)
+						if err != nil {
+							return fmt.Errorf("setting up logger: %w", err)
+						}
+						defer logger.Close()
+
+						fmt.Fprintf(os.Stderr, "Starting gocker daemon (pid %d)\n", pid)
+						fmt.Fprintf(os.Stderr, "Listening on %s\n", socketPath)
+						fmt.Fprintf(os.Stderr, "Logging to %s\n", logPath)
+						// Print blank lines to reserve space for the rolling display
+						for range 5 {
+							fmt.Fprintln(os.Stderr)
+						}
+
 						srv := api.NewServer(eng, socketPath)
+						srv.SetLogger(logger)
 						return srv.ListenAndServe(ctx)
 					}
 
