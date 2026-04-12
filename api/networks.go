@@ -48,6 +48,7 @@ func (s *Server) handleNetworkCreate(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
+	s.publishEvent("network", "create", req.Name, map[string]string{"name": req.Name})
 	writeJSON(w, http.StatusCreated, map[string]string{"Id": req.Name})
 }
 
@@ -57,6 +58,7 @@ func (s *Server) handleNetworkRemove(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
+	s.publishEvent("network", "destroy", id, nil)
 	w.WriteHeader(http.StatusNoContent)
 }
 
@@ -71,6 +73,7 @@ func (s *Server) handleNetworkConnect(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
+	s.publishEvent("network", "connect", id, map[string]string{"container": req.Container})
 	w.WriteHeader(http.StatusOK)
 }
 
@@ -85,5 +88,6 @@ func (s *Server) handleNetworkDisconnect(w http.ResponseWriter, r *http.Request)
 		writeError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
+	s.publishEvent("network", "disconnect", id, map[string]string{"container": req.Container})
 	w.WriteHeader(http.StatusOK)
 }

@@ -33,6 +33,7 @@ func (s *Server) handleVolumeCreate(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
+	s.publishEvent("volume", "create", req.Name, map[string]string{"driver": req.Driver})
 	writeJSON(w, http.StatusCreated, VolumeJSON{Name: req.Name, Driver: req.Driver})
 }
 
@@ -42,6 +43,7 @@ func (s *Server) handleVolumeRemove(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
+	s.publishEvent("volume", "destroy", name, nil)
 	w.WriteHeader(http.StatusNoContent)
 }
 

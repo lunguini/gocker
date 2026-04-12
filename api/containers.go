@@ -91,6 +91,8 @@ func (s *Server) handleContainerCreate(w http.ResponseWriter, r *http.Request) {
 	if id == "" {
 		id = "unknown"
 	}
+	s.publishEvent("container", "create", id, map[string]string{"image": req.Image, "name": name})
+	s.publishEvent("container", "start", id, map[string]string{"image": req.Image, "name": name})
 	writeJSON(w, http.StatusCreated, CreateContainerResponse{
 		ID:       id,
 		Warnings: []string{},
@@ -103,6 +105,7 @@ func (s *Server) handleContainerStart(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
+	s.publishEvent("container", "start", id, nil)
 	w.WriteHeader(http.StatusNoContent)
 }
 
@@ -112,6 +115,8 @@ func (s *Server) handleContainerStop(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
+	s.publishEvent("container", "stop", id, nil)
+	s.publishEvent("container", "die", id, nil)
 	w.WriteHeader(http.StatusNoContent)
 }
 
@@ -121,6 +126,8 @@ func (s *Server) handleContainerKill(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
+	s.publishEvent("container", "kill", id, nil)
+	s.publishEvent("container", "die", id, nil)
 	w.WriteHeader(http.StatusNoContent)
 }
 
@@ -131,6 +138,7 @@ func (s *Server) handleContainerRemove(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
+	s.publishEvent("container", "destroy", id, nil)
 	w.WriteHeader(http.StatusNoContent)
 }
 
@@ -142,13 +150,21 @@ func (s *Server) handleContainerInspect(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	// Parse and re-wrap in Docker-compatible format
+	// Parse and re-wrap in Docker-compatible format.
+	// Apple CLI may return a JSON array — unwrap the first element.
 	var raw map[string]any
 	if err := json.Unmarshal(data, &raw); err != nil {
-		// Return raw if we can't parse
-		w.Header().Set("Content-Type", "application/json")
-		_, _ = w.Write(data)
-		return
+		var arr []map[string]any
+		if arrErr := json.Unmarshal(data, &arr); arrErr == nil {
+			if len(arr) == 0 {
+				writeError(w, http.StatusNotFound, "No such container: "+id)
+				return
+			}
+			raw = arr[0]
+		} else {
+			writeError(w, http.StatusInternalServerError, "failed to parse inspect data")
+			return
+		}
 	}
 
 	// Build a Docker-compatible inspect response

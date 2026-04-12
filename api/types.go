@@ -148,3 +148,19 @@ type ExecStartRequest struct {
 	Detach bool `json:"Detach"`
 	Tty    bool `json:"Tty"`
 }
+
+// Docker-compatible event types for GET /events streaming endpoint.
+
+type Event struct {
+	Type     string     `json:"Type"`
+	Action   string     `json:"Action"`
+	Actor    EventActor `json:"Actor"`
+	Time     int64      `json:"time"`
+	TimeNano int64      `json:"timeNano"`
+	Scope    string     `json:"scope"`
+}
+
+type EventActor struct {
+	ID         string            `json:"ID"`
+	Attributes map[string]string `json:"Attributes"`
+}

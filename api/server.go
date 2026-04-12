@@ -17,6 +17,8 @@ type Server struct {
 	eng        engine.Runtime
 	socketPath string
 	mux        *http.ServeMux
+	events     *EventBus
+	logger     *Logger
 }
 
 func NewServer(eng engine.Runtime, socketPath string) *Server {
@@ -24,6 +26,7 @@ func NewServer(eng engine.Runtime, socketPath string) *Server {
 		eng:        eng,
 		socketPath: socketPath,
 		mux:        http.NewServeMux(),
+		events:     NewEventBus(),
 	}
 	s.registerRoutes()
 	return s
@@ -35,6 +38,9 @@ func (s *Server) registerRoutes() {
 	s.mux.HandleFunc("HEAD /_ping", s.handlePing)
 	s.mux.HandleFunc("GET /version", s.handleVersion)
 	s.mux.HandleFunc("GET /info", s.handleInfo)
+
+	// Events
+	s.mux.HandleFunc("GET /events", s.handleEvents)
 
 	// Containers
 	s.mux.HandleFunc("GET /containers/json", s.handleContainerList)
@@ -51,8 +57,8 @@ func (s *Server) registerRoutes() {
 	// Images
 	s.mux.HandleFunc("GET /images/json", s.handleImageList)
 	s.mux.HandleFunc("POST /images/create", s.handleImagePull)
-	s.mux.HandleFunc("DELETE /images/{name}", s.handleImageRemove)
-	s.mux.HandleFunc("GET /images/{name}/json", s.handleImageInspect)
+	s.mux.HandleFunc("DELETE /images/{name...}", s.handleImageRemove)
+	s.mux.HandleFunc("GET /images/{name...}", s.handleImageInspect)
 
 	// Networks
 	s.mux.HandleFunc("GET /networks", s.handleNetworkList)
@@ -80,7 +86,11 @@ func (s *Server) ListenAndServe(ctx context.Context) error {
 
 	_ = os.Chmod(s.socketPath, 0660)
 
-	srv := &http.Server{Handler: s}
+	var handler http.Handler = s
+	if s.logger != nil {
+		handler = loggingMiddleware(s, s.logger)
+	}
+	srv := &http.Server{Handler: handler}
 
 	ctx, cancel := signal.NotifyContext(ctx, syscall.SIGTERM, syscall.SIGINT)
 	defer cancel()
