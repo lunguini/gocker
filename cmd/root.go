@@ -47,7 +47,8 @@ func NewApp(version string) *cli.Command {
 		Name:                  "gocker",
 		Usage:                 "Docker-compatible CLI for Apple Container on macOS",
 		Version:               version,
-		EnableShellCompletion: true,
+		EnableShellCompletion:  true,
+		UseShortOptionHandling: true,
 		Flags: []cli.Flag{
 			&cli.StringFlag{
 				Name:  "format",
