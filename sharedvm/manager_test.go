@@ -15,6 +15,7 @@ func newTestManager(rt engine.Runtime) *Manager {
 		apple:  rt,
 		config: config.SharedVM{},
 		mounts: map[string]string{},
+		name:   vmName,
 	}
 }
 
@@ -289,5 +290,88 @@ func TestEnsureRunning_StartFails(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "starting shared VM") {
 		t.Errorf("expected error to contain \"starting shared VM\", got %q", err.Error())
+	}
+}
+
+func TestExpandMounts_AddsNewMount(t *testing.T) {
+	tmpDir := t.TempDir()
+	origStateDir := stateDir
+	stateDir = func() string { return tmpDir }
+	defer func() { stateDir = origStateDir }()
+
+	var removeCalled, runCalled bool
+	rt := &engine.MockRuntime{
+		ContainerListFunc: func(ctx context.Context, all bool) ([]engine.ContainerInfo, error) {
+			return nil, nil
+		},
+		ContainerInspectFunc: func(ctx context.Context, nameOrID string) ([]byte, error) {
+			if runCalled {
+				return []byte(`[{"status":"running"}]`), nil
+			}
+			return nil, errors.New("not found")
+		},
+		ContainerRemoveFunc: func(ctx context.Context, nameOrID string, force bool) error {
+			removeCalled = true
+			return nil
+		},
+		ContainerStopFunc: func(ctx context.Context, nameOrID string) error {
+			return nil
+		},
+		ContainerRunFunc: func(ctx context.Context, args []string, interactive bool) error {
+			runCalled = true
+			return nil
+		},
+		ExecFunc: func(ctx context.Context, args ...string) ([]byte, []byte, error) {
+			if runCalled {
+				return nil, nil, nil
+			}
+			return nil, nil, errors.New("not running")
+		},
+	}
+
+	m := newTestManager(rt)
+	m.mounts = map[string]string{"/Users/adrian": "/host/Users/adrian"}
+
+	err := m.ExpandMounts(context.Background(), []string{"/opt/data"})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !removeCalled {
+		t.Error("expected VM to be removed for recreation")
+	}
+	if !runCalled {
+		t.Error("expected VM to be recreated")
+	}
+	if _, ok := m.mounts["/opt/data"]; !ok {
+		t.Error("expected /opt/data to be added to mounts")
+	}
+}
+
+func TestExpandMounts_AlreadyCovered(t *testing.T) {
+	rt := &engine.MockRuntime{}
+	m := newTestManager(rt)
+	m.mounts = map[string]string{"/Users/adrian": "/host/Users/adrian"}
+
+	err := m.ExpandMounts(context.Background(), []string{"/Users/adrian/code"})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestExpandMounts_ContainersRunning(t *testing.T) {
+	rt := &engine.MockRuntime{
+		ContainerListFunc: func(ctx context.Context, all bool) ([]engine.ContainerInfo, error) {
+			return []engine.ContainerInfo{{ID: "web", Name: "web", Status: "running"}}, nil
+		},
+	}
+	m := newTestManager(rt)
+	m.mounts = map[string]string{"/Users/adrian": "/host/Users/adrian"}
+
+	err := m.ExpandMounts(context.Background(), []string{"/opt/data"})
+	if err == nil {
+		t.Fatal("expected error when containers are running")
+	}
+	if !strings.Contains(err.Error(), "containers are running") {
+		t.Errorf("expected error about running containers, got: %v", err)
 	}
 }
