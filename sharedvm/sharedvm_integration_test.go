@@ -37,7 +37,7 @@ func integrationManager(t *testing.T) *Manager {
 
 func skipIfNoVirtualization(t *testing.T, err error) {
 	t.Helper()
-	if err != nil && strings.Contains(err.Error(), "Virtualization") {
+	if err != nil && (strings.Contains(err.Error(), "Virtualization") || strings.Contains(err.Error(), "XPC connection error")) {
 		t.Skipf("skipping: %v", err)
 	}
 }
