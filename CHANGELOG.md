@@ -1,5 +1,13 @@
 # Changelog
 
+## v0.6.1
+
+- fix: enable POSIX short flag composition (-it, -ti, etc.)
+- Merge branch 'main' of github.com:lunguini/gocker
+- fix: tolerate launchd auto-restart in system stop/restart test
+- fix: skip integration tests on XPC connection errors
+- docs: update CHANGELOG.md for v0.6.0
+
 ## v0.6.0
 
 - docs: update compatibility matrix and CLAUDE.md for v0.6.0
