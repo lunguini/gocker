@@ -1,10 +1,16 @@
-.claude
+.claude/
+.claude-session-backup/
+
 .git
 .idea/
 
 docs/superpowers/
+jobs/
 
 gocker
 gocker-linux
 
 CHANGELOG.local.md
+.DS_Store
+
+test/benchmark.sh

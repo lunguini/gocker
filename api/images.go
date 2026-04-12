@@ -3,6 +3,7 @@ package api
 import (
 	"fmt"
 	"net/http"
+	"strings"
 )
 
 func (s *Server) handleImageList(w http.ResponseWriter, r *http.Request) {
@@ -47,6 +48,7 @@ func (s *Server) handleImagePull(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	s.publishEvent("image", "pull", image, map[string]string{"name": image})
 	w.Header().Set("Content-Type", "application/json")
 	_, _ = fmt.Fprintf(w, `{"status":"Downloaded newer image for %s"}`, image)
 }
@@ -54,16 +56,23 @@ func (s *Server) handleImagePull(w http.ResponseWriter, r *http.Request) {
 func (s *Server) handleImageRemove(w http.ResponseWriter, r *http.Request) {
 	name := r.PathValue("name")
 	if err := s.eng.ImageRemove(r.Context(), name); err != nil {
-		writeError(w, http.StatusInternalServerError, err.Error())
+		errMsg := err.Error()
+		if strings.Contains(errMsg, "not found") || strings.Contains(errMsg, "No such image") ||
+			strings.Contains(errMsg, "unknown image") || strings.Contains(errMsg, "does not exist") {
+			writeError(w, http.StatusNotFound, "No such image: "+name)
+		} else {
+			writeError(w, http.StatusInternalServerError, errMsg)
+		}
 		return
 	}
+	s.publishEvent("image", "delete", name, map[string]string{"name": name})
 	writeJSON(w, http.StatusOK, []map[string]string{{"Deleted": name}})
 }
 
 func (s *Server) handleImageInspect(w http.ResponseWriter, r *http.Request) {
 	// Apple Container doesn't have a direct image inspect command
 	// Return a minimal response
-	name := r.PathValue("name")
+	name := strings.TrimSuffix(r.PathValue("name"), "/json")
 	images, err := s.eng.ImageList(r.Context())
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, err.Error())
@@ -75,7 +84,7 @@ func (s *Server) handleImageInspect(w http.ResponseWriter, r *http.Request) {
 			resp := map[string]any{
 				"Id":       img.ID,
 				"RepoTags": []string{fullName},
-				"Created":  img.Created.Unix(),
+				"Created":  img.Created.UTC().Format("2006-01-02T15:04:05Z"),
 				"Size":     0,
 			}
 			writeJSON(w, http.StatusOK, resp)
