@@ -2,8 +2,8 @@
 
 ## v0.6.5
 
-- fix: harden ResolveMountParent against symlink-based blocklist bypass and non-absolute input
-- test: add symlink and relative-path regression tests for mount resolution
+- fix: harden ResolveMountParent against symlink-based blocklist bypass
+- docs: update CHANGELOG.md for v0.6.4
 
 ## v0.6.4
 
