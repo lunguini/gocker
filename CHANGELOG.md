@@ -2,7 +2,9 @@
 
 ## v0.6.2
 
+- docs: update CHANGELOG.md for v0.6.2 and note commit convention
 - fix: reshape network inspect API response for Docker SDK compatibility
+- docs: update CHANGELOG.md for v0.6.1
 
 ## v0.6.1
 
