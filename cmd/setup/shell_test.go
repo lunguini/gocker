@@ -110,6 +110,62 @@ func TestInstallShellBlockRespectsExistingDOCKER_HOST(t *testing.T) {
 	}
 }
 
+func TestRcAlreadyPointsAt_CommentedOutIgnored(t *testing.T) {
+	content := "# export DOCKER_HOST=unix:///Users/me/.gocker/gocker.sock\n"
+	if rcAlreadyPointsAt(content, "unix:///Users/me/.gocker/gocker.sock") {
+		t.Error("commented-out export should not count")
+	}
+}
+
+func TestRcAlreadyPointsAt_QuotedForms(t *testing.T) {
+	target := "unix:///Users/me/.gocker/gocker.sock"
+	cases := []struct {
+		name    string
+		content string
+	}{
+		{"unquoted", `export DOCKER_HOST=unix:///Users/me/.gocker/gocker.sock`},
+		{"double-quoted", `export DOCKER_HOST="unix:///Users/me/.gocker/gocker.sock"`},
+		{"single-quoted", `export DOCKER_HOST='unix:///Users/me/.gocker/gocker.sock'`},
+		{"fish -gx unquoted", `set -gx DOCKER_HOST unix:///Users/me/.gocker/gocker.sock`},
+		{"fish -gx quoted", `set -gx DOCKER_HOST "unix:///Users/me/.gocker/gocker.sock"`},
+		{"fish -x quoted", `set -x DOCKER_HOST "unix:///Users/me/.gocker/gocker.sock"`},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if !rcAlreadyPointsAt(tc.content+"\n", target) {
+				t.Errorf("should match: %s", tc.content)
+			}
+		})
+	}
+}
+
+func TestRcAlreadyPointsAt_DifferentSocketNotMatched(t *testing.T) {
+	content := `export DOCKER_HOST="unix:///var/run/docker.sock"` + "\n"
+	if rcAlreadyPointsAt(content, "unix:///Users/me/.gocker/gocker.sock") {
+		t.Error("different socket should not count as matching")
+	}
+}
+
+func TestInstallShellBlock_CreatesFileWhenMissing(t *testing.T) {
+	tmp := t.TempDir()
+	rc := filepath.Join(tmp, "fish-subdir", "config.fish") // parent dir does not exist yet
+
+	changed, err := InstallShellBlock(rc, "fish", "/Users/me/.gocker/gocker.sock")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !changed {
+		t.Error("expected changed=true on fresh install")
+	}
+	data, err := os.ReadFile(rc)
+	if err != nil {
+		t.Fatalf("rc file not created: %v", err)
+	}
+	if !strings.Contains(string(data), "set -gx DOCKER_HOST") {
+		t.Errorf("fish syntax missing: %s", data)
+	}
+}
+
 func TestShellExportSyntax(t *testing.T) {
 	if got := shellExport("zsh", "DOCKER_HOST", "unix:///foo"); got != `export DOCKER_HOST="unix:///foo"` {
 		t.Errorf("zsh: %q", got)

@@ -110,11 +110,54 @@ func stripGockerBlock(content string) string {
 	return blockRe.ReplaceAllString(content, "")
 }
 
-// rcAlreadyPointsAt returns true if an export outside our managed block
-// already sets DOCKER_HOST to the given target.
+// rcAlreadyPointsAt returns true if an uncommented export statement outside
+// our managed block already sets DOCKER_HOST to the given target. Handles
+// bash/zsh `export` syntax and fish `set -gx`/`set -x` syntax. Ignores
+// commented-out lines.
 func rcAlreadyPointsAt(content, dockerHost string) bool {
 	stripped := stripGockerBlock(content)
-	return strings.Contains(stripped, "DOCKER_HOST="+dockerHost) ||
-		strings.Contains(stripped, "DOCKER_HOST=\""+dockerHost+"\"") ||
-		strings.Contains(stripped, "DOCKER_HOST "+dockerHost) // fish set-style
+	for _, line := range strings.Split(stripped, "\n") {
+		trim := strings.TrimSpace(line)
+		if trim == "" || strings.HasPrefix(trim, "#") {
+			continue
+		}
+		if lineExportsDockerHost(trim, dockerHost) {
+			return true
+		}
+	}
+	return false
+}
+
+// lineExportsDockerHost returns true if trim is a shell export statement
+// setting DOCKER_HOST to dockerHost. Accepts:
+//
+//	export DOCKER_HOST=unix://...
+//	export DOCKER_HOST="unix://..."
+//	export DOCKER_HOST='unix://...'
+//	set -gx DOCKER_HOST unix://...
+//	set -gx DOCKER_HOST "unix://..."
+//	set -x  DOCKER_HOST ...  (same as -gx)
+func lineExportsDockerHost(trim, dockerHost string) bool {
+	// bash/zsh: export DOCKER_HOST=<value>
+	if val, ok := strings.CutPrefix(trim, "export DOCKER_HOST="); ok {
+		return unquote(val) == dockerHost
+	}
+	// fish: set -gx DOCKER_HOST <value>  (also -x, which is the same in script files)
+	for _, prefix := range []string{"set -gx DOCKER_HOST ", "set -x DOCKER_HOST "} {
+		if val, ok := strings.CutPrefix(trim, prefix); ok {
+			return unquote(strings.TrimSpace(val)) == dockerHost
+		}
+	}
+	return false
+}
+
+// unquote strips one layer of surrounding single or double quotes, if present.
+func unquote(s string) string {
+	s = strings.TrimSpace(s)
+	if len(s) >= 2 {
+		if (s[0] == '"' && s[len(s)-1] == '"') || (s[0] == '\'' && s[len(s)-1] == '\'') {
+			return s[1 : len(s)-1]
+		}
+	}
+	return s
 }
