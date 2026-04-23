@@ -1,0 +1,5 @@
+services:
+  app:
+    environment:
+      SOURCE: override
+      ADDED_BY_OVERRIDE: "yes"

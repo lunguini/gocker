@@ -1,0 +1,6 @@
+services:
+  app:
+    image: docker.io/library/alpine:3
+    environment:
+      SOURCE: base
+    command: ["/bin/sh", "-c", "sleep infinity"]
