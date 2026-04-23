@@ -4,10 +4,8 @@ import (
 	"context"
 	"fmt"
 	"os"
-	"runtime"
 
 	"github.com/lunguini/gocker/config"
-	"golang.org/x/sys/unix"
 )
 
 // Options controls wizard behavior.
@@ -98,13 +96,3 @@ func promptResources(defCPU int, defMem string) (int, string) {
 	return cpu, mem
 }
 
-// detectHostResources returns (cpus, memoryGiB) from the host OS.
-// Re-introduced here from the earlier draft of resources.go; now actually used.
-func detectHostResources() (int, int) {
-	cpus := runtime.NumCPU()
-	mem := 8 // fallback
-	if v, err := unix.SysctlUint64("hw.memsize"); err == nil {
-		mem = int(v / (1024 * 1024 * 1024))
-	}
-	return cpus, mem
-}
