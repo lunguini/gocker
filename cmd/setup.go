@@ -13,6 +13,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/lunguini/gocker/cmd/setup"
 	"github.com/lunguini/gocker/engine"
 	"github.com/urfave/cli/v3"
 )
@@ -35,14 +36,20 @@ type ghAsset struct {
 func newSetupCmd(eng engine.Runtime) *cli.Command {
 	return &cli.Command{
 		Name:  "setup",
-		Usage: "Check prerequisites and install Apple Container",
+		Usage: "Check prerequisites, install Apple Container, configure gocker",
+		Flags: []cli.Flag{
+			&cli.BoolFlag{
+				Name:  "yes",
+				Usage: "Non-interactive mode: use CI-friendly defaults (shared isolation), skip shell/docker-context prompts",
+			},
+		},
 		Action: func(ctx context.Context, cmd *cli.Command) error {
-			return runSetup(ctx, eng)
+			return runSetup(ctx, eng, cmd.Bool("yes"))
 		},
 	}
 }
 
-func runSetup(ctx context.Context, eng engine.Runtime) error {
+func runSetup(ctx context.Context, eng engine.Runtime, nonInteractive bool) error {
 	// Step 1: Check macOS version
 	fmt.Print("Checking macOS version... ")
 	verOut, err := exec.CommandContext(ctx, "sw_vers", "-productVersion").Output()
@@ -101,7 +108,12 @@ func runSetup(ctx context.Context, eng engine.Runtime) error {
 	}
 	fmt.Println("OK")
 
-	// Step 6: Summary
+	// Step 6: Interactive configuration wizard.
+	if err := setup.RunWizard(ctx, setup.Options{NonInteractive: nonInteractive}); err != nil {
+		return fmt.Errorf("configuration wizard: %w", err)
+	}
+
+	// Step 7: Summary
 	fmt.Println("\nGocker is ready! Run 'gocker ps' to get started.")
 	return nil
 }
