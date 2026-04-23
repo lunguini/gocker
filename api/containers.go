@@ -74,7 +74,12 @@ func (s *Server) handleContainerCreate(w http.ResponseWriter, r *http.Request) {
 		for _, bind := range req.HostConfig.Binds {
 			args = append(args, "-v", bind)
 		}
-		if req.HostConfig.NetworkMode != "" {
+		// Docker CLI sends NetworkMode="default" on every `docker run` without
+		// an explicit --network; that's Docker Engine's internal sentinel
+		// meaning "use the default network". The backend CLIs (Apple
+		// container, nerdctl) don't recognize "default" — pass nothing and
+		// let them pick their own default.
+		if req.HostConfig.NetworkMode != "" && req.HostConfig.NetworkMode != "default" {
 			args = append(args, "--network", req.HostConfig.NetworkMode)
 		}
 	}

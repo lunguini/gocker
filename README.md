@@ -317,11 +317,7 @@ make template-push          # Build and push all template images
 - [x] Homebrew formula (`brew tap lunguini/tap && brew install gocker`)
 - [ ] Image pull performance — registry mirror config in `~/.gocker/config.yaml`, benchmark Apple CLI vs Docker to identify where time goes (DNS, HTTP, extract, ext4 format), consider layer-cache sharing across full-isolation runs
 - [ ] Live Docker SDK e2e harness — blocked: Apple Container CLI's virtiofs passes socket file inodes but AF_UNIX connections can't flow through to the host's socket server, so we can't exercise gocker's API from a container that bind-mounts `~/.gocker`. Options: expose the daemon on a TCP loopback socket, or run the SDK harness on the host (a Go test rather than a compose scenario). Shape-level SDK compat is already covered by `api/docker_compat_test.go`
-- [ ] Real Docker CLI interop gaps (found by pointing `docker context use gocker` at a real Docker 29 CLI):
-  - `docker run` fails — defaults to network "default" which gocker doesn't create; need to either auto-create `default` or translate the request to `bridge`/no-network
-  - `docker run --network bridge` fails on `/containers/{id}/attach` — endpoint not implemented (returns 404; CLI reports "unable to upgrade to tcp")
-  - `docker system df` returns 404 — `/system/df` endpoint not implemented
-  - `docker events` returns empty — `/events` streaming endpoint not implemented (or returns immediately without emitting anything)
+- [ ] `/containers/{id}/attach` — hijacked-TCP bidirectional stdio multiplexer required for `docker run -it` / `docker attach`. Large: HTTP upgrade, 8-byte stream headers for stdout/stderr framing, TTY raw-mode pty wiring, signal handling. `docker run -d` works without it. Deserves its own plan. Surfaced by real docker CLI: `docker run --network bridge alpine:3 echo hi` returns `unable to upgrade to tcp, received 404`.
 - [ ] Network policy enforcement (`--network-policy deny --allow-host api.anthropic.com`)
 - [ ] Codex and Gemini sandbox templates
 

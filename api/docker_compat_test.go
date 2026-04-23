@@ -11,6 +11,7 @@ import (
 
 	dockertypes "github.com/docker/docker/api/types"
 	dockercontainer "github.com/docker/docker/api/types/container"
+	dockerevents "github.com/docker/docker/api/types/events"
 	dockerimage "github.com/docker/docker/api/types/image"
 	dockervolume "github.com/docker/docker/api/types/volume"
 
@@ -302,6 +303,136 @@ func TestDockerCompat_ContainerCreateResponse(t *testing.T) {
 	}
 	if out.ID == "" {
 		t.Errorf("ID should be populated")
+	}
+}
+
+func TestDockerCompat_EventShape(t *testing.T) {
+	// Verify that the JSON shape gocker emits for events decodes cleanly into
+	// the docker SDK's events.Message type. The /events endpoint writes one
+	// Event per line — decode a single line in isolation.
+	srv := NewServer(&stubRuntime{}, "")
+	srv.publishEvent("container", "start", "abc123", map[string]string{"image": "alpine:3"})
+
+	// Build a synthetic request to trigger a flush.
+	// We subscribe directly to the bus and emit an event; verify the shape.
+	ch, unsub := srv.events.Subscribe()
+	defer unsub()
+
+	srv.publishEvent("container", "die", "abc123", map[string]string{"exitCode": "0"})
+
+	select {
+	case evt := <-ch:
+		data, err := json.Marshal(evt)
+		if err != nil {
+			t.Fatalf("marshal: %v", err)
+		}
+		// Decode into the docker SDK's events.Message.
+		var msg dockerevents.Message
+		if err := json.Unmarshal(data, &msg); err != nil {
+			t.Fatalf("docker SDK cannot unmarshal events.Message: %v\npayload=%s", err, data)
+		}
+		if msg.Type != "container" {
+			t.Errorf("Type: got %q, want container", msg.Type)
+		}
+		if msg.Action != "die" {
+			t.Errorf("Action: got %q, want die", msg.Action)
+		}
+		if msg.Actor.ID != "abc123" {
+			t.Errorf("Actor.ID: got %q, want abc123", msg.Actor.ID)
+		}
+		if msg.Actor.Attributes["exitCode"] != "0" {
+			t.Errorf("Actor.Attributes[exitCode]: got %q, want 0", msg.Actor.Attributes["exitCode"])
+		}
+	case <-time.After(time.Second):
+		t.Fatal("timed out waiting for event")
+	}
+}
+
+func TestDockerCompat_SystemDf(t *testing.T) {
+	srv := NewServer(&stubRuntime{
+		imageList: func(ctx context.Context) ([]engine.ImageInfo, error) {
+			return []engine.ImageInfo{
+				{ID: "sha256:abc", Name: "nginx", Tag: "1.25", Created: time.Now()},
+			}, nil
+		},
+		containerList: func(ctx context.Context, all bool) ([]engine.ContainerInfo, error) {
+			return []engine.ContainerInfo{
+				{ID: "ctr-1", Name: "web", Image: "nginx:1.25", State: "running", Status: "Up", Created: time.Now()},
+			}, nil
+		},
+		volumeList: func(ctx context.Context) ([]engine.VolumeInfo, error) {
+			return []engine.VolumeInfo{
+				{Name: "pgdata", Driver: "local", Mountpoint: "/var/lib/gocker/volumes/pgdata"},
+			}, nil
+		},
+	}, "")
+
+	rr := doGET(t, srv, "/system/df")
+	if rr.Code != http.StatusOK {
+		t.Fatalf("status: got %d, want 200; body=%s", rr.Code, rr.Body.String())
+	}
+	var out dockertypes.DiskUsage
+	if err := json.Unmarshal(rr.Body.Bytes(), &out); err != nil {
+		t.Fatalf("docker SDK cannot unmarshal DiskUsage: %v\nbody=%s", err, rr.Body.String())
+	}
+	if len(out.Images) != 1 {
+		t.Errorf("Images: got %d, want 1", len(out.Images))
+	}
+	if len(out.Containers) != 1 {
+		t.Errorf("Containers: got %d, want 1", len(out.Containers))
+	}
+	if len(out.Volumes) != 1 {
+		t.Errorf("Volumes: got %d, want 1", len(out.Volumes))
+	}
+}
+
+func TestDockerCompat_ContainerCreate_IgnoresDefaultNetworkMode(t *testing.T) {
+	// Docker CLI sends HostConfig.NetworkMode="default" on every `docker run`;
+	// gocker must NOT forward that to the backend (which doesn't know "default").
+	var capturedArgs []string
+	stub := &stubRuntime{
+		containerRun: func(ctx context.Context, args []string, interactive bool) error {
+			capturedArgs = args
+			return nil
+		},
+	}
+	srv := NewServer(stub, "")
+
+	body := `{"Image":"alpine:3","HostConfig":{"NetworkMode":"default"}}`
+	rr := doPOST(t, srv, "/containers/create?name=test", body)
+	if rr.Code != http.StatusCreated {
+		t.Fatalf("status: got %d, want 201; body=%s", rr.Code, rr.Body.String())
+	}
+	for i, a := range capturedArgs {
+		if a == "--network" && i+1 < len(capturedArgs) && capturedArgs[i+1] == "default" {
+			t.Errorf("--network default leaked into backend args: %v", capturedArgs)
+		}
+	}
+}
+
+func TestDockerCompat_ContainerCreate_PassesExplicitNetworkMode(t *testing.T) {
+	var capturedArgs []string
+	stub := &stubRuntime{
+		containerRun: func(ctx context.Context, args []string, interactive bool) error {
+			capturedArgs = args
+			return nil
+		},
+	}
+	srv := NewServer(stub, "")
+
+	body := `{"Image":"alpine:3","HostConfig":{"NetworkMode":"my-net"}}`
+	rr := doPOST(t, srv, "/containers/create?name=test", body)
+	if rr.Code != http.StatusCreated {
+		t.Fatalf("status: got %d, want 201", rr.Code)
+	}
+	found := false
+	for i, a := range capturedArgs {
+		if a == "--network" && i+1 < len(capturedArgs) && capturedArgs[i+1] == "my-net" {
+			found = true
+		}
+	}
+	if !found {
+		t.Errorf("explicit network mode 'my-net' not forwarded: %v", capturedArgs)
 	}
 }
 

@@ -18,6 +18,7 @@ type stubRuntime struct {
 	volumeInspect    func(ctx context.Context, name string) ([]byte, error)
 	containerInspect func(ctx context.Context, nameOrID string) ([]byte, error)
 	containerList    func(ctx context.Context, all bool) ([]engine.ContainerInfo, error)
+	containerRun     func(ctx context.Context, args []string, interactive bool) error
 	imageList        func(ctx context.Context) ([]engine.ImageInfo, error)
 	networkList      func(ctx context.Context) ([]engine.NetworkInfo, error)
 	volumeList       func(ctx context.Context) ([]engine.VolumeInfo, error)
@@ -35,6 +36,9 @@ func (s *stubRuntime) ExecStream(ctx context.Context, args ...string) (io.ReadCl
 	return nil, nil
 }
 func (s *stubRuntime) ContainerRun(ctx context.Context, args []string, interactive bool) error {
+	if s.containerRun != nil {
+		return s.containerRun(ctx, args, interactive)
+	}
 	return nil
 }
 func (s *stubRuntime) ContainerList(ctx context.Context, all bool) ([]engine.ContainerInfo, error) {

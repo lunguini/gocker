@@ -38,6 +38,7 @@ func (s *Server) registerRoutes() {
 	s.mux.HandleFunc("HEAD /_ping", s.handlePing)
 	s.mux.HandleFunc("GET /version", s.handleVersion)
 	s.mux.HandleFunc("GET /info", s.handleInfo)
+	s.mux.HandleFunc("GET /system/df", s.handleSystemDf)
 
 	// Events
 	s.mux.HandleFunc("GET /events", s.handleEvents)
