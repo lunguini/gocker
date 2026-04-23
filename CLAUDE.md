@@ -149,6 +149,7 @@ make smoke    # full end-to-end (requires macOS 26+ with container CLI)
 - **Golden file tests** (`engine/testdata/`) — captured Apple CLI JSON output tested against parsers. When Apple changes the format, update testdata and fix failing tests.
 - **Compose unit tests** (`compose/`) — YAML parsing, dependency ordering, volume resolution, env injection.
 - **Smoke test** (`test/smoke.sh`) — exercises every CLI interaction: pull, run, ps, inspect, exec, logs, stop, rm, networks, volumes, compose up/down.
+- **E2E compose tests** (`test/e2e/`) — real services via `gocker compose`. Run `make e2e` before tagging a release. Each scenario is a self-contained `test/e2e/scenarios/<name>/` directory with `docker-compose.yml` + `assert.sh`. Takes 5-10 minutes and pulls images from Docker Hub.
 
 ## Versioning
 
