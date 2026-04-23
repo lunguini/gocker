@@ -2,7 +2,6 @@ package cmd
 
 import (
 	"context"
-	"fmt"
 
 	"github.com/lunguini/gocker/engine"
 	"github.com/urfave/cli/v3"
@@ -11,16 +10,13 @@ import (
 func newRmiCmd(eng engine.Runtime) *cli.Command {
 	return &cli.Command{
 		Name:      "rmi",
-		Usage:     "Remove an image",
+		Usage:     "Remove one or more images",
 		ArgsUsage: "IMAGE [IMAGE...]",
 		Action: func(ctx context.Context, cmd *cli.Command) error {
-			for _, image := range cmd.Args().Slice() {
-				if err := eng.ImageRemove(ctx, image); err != nil {
-					return err
-				}
-				fmt.Println("Deleted:", image)
+			if cmd.Args().Len() == 0 {
+				return cli.Exit("requires at least one image name", 2)
 			}
-			return nil
+			return removeImages(ctx, eng, cmd.Args().Slice())
 		},
 	}
 }

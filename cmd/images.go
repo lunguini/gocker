@@ -43,19 +43,13 @@ func newImageCmd(eng engine.Runtime) *cli.Command {
 			},
 			{
 				Name:      "rm",
-				Usage:     "Remove an image",
+				Usage:     "Remove one or more images",
 				ArgsUsage: "IMAGE [IMAGE...]",
 				Action: func(ctx context.Context, cmd *cli.Command) error {
 					if cmd.Args().Len() == 0 {
 						return cli.Exit("requires at least one image name", 2)
 					}
-					for _, image := range cmd.Args().Slice() {
-						if err := eng.ImageRemove(ctx, image); err != nil {
-							return err
-						}
-						fmt.Println("Deleted:", image)
-					}
-					return nil
+					return removeImages(ctx, eng, cmd.Args().Slice())
 				},
 			},
 		},
