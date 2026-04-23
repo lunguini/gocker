@@ -18,21 +18,83 @@ log_section() { printf "\n${CYAN}=== %s ===${NC}\n" "$*"; }
 : "${GOCKER:=gocker}"
 
 # wait_for_healthy waits up to $2 seconds for every service in the current
-# compose project to report healthy. Services without a healthcheck are treated
-# as healthy as soon as they're running.
+# compose project to reach a good state. Requires at least one container to
+# exist and that no container is in a bad state (starting, unhealthy, created,
+# exited, restarting, dead). Success requires seeing state:"running" (or
+# health:"healthy") on at least one service.
+#
+# IMPORTANT: nerdctl compose on gocker's shared VM currently IGNORES user-defined
+# `healthcheck:` blocks, so the ps output always has Health:"". This function can
+# only confirm the container is running — NOT that the service inside is ready to
+# accept connections. Callers that need real readiness (postgres accepting
+# queries, a broker accepting Kafka connections) must use `retry_exec` on top of
+# this — see postgres/redpanda scenarios for examples.
 wait_for_healthy() {
     local project="$1"; local timeout="${2:-60}"
     local deadline=$(( $(date +%s) + timeout ))
     while [ "$(date +%s)" -lt "$deadline" ]; do
         local ps_out
         ps_out=$("$GOCKER" compose -p "$project" ps --format json 2>/dev/null || true)
-        if [ -n "$ps_out" ] && ! echo "$ps_out" | grep -qE '"(starting|unhealthy)"'; then
+        # No containers yet — keep waiting.
+        if [ -z "$ps_out" ] || [ "$ps_out" = "[]" ] || [ "$ps_out" = "null" ]; then
+            sleep 1
+            continue
+        fi
+        # Any bad state means not ready.
+        if echo "$ps_out" | grep -qE '"(starting|unhealthy|created|exited|restarting|dead|paused)"'; then
+            sleep 1
+            continue
+        fi
+        # Need to see at least one healthy/running status to call it healthy.
+        if echo "$ps_out" | grep -qE '"(healthy|running)"'; then
             return 0
         fi
-        sleep 2
+        sleep 1
     done
     log_fail "services did not become healthy within ${timeout}s"
     "$GOCKER" compose -p "$project" ps || true
+    return 1
+}
+
+# retry_exec retries a `gocker compose exec` invocation until it succeeds or the
+# timeout elapses. Use this for readiness probes when `healthcheck:` is not
+# honored (nerdctl compose on gocker ignores it, so we have to poll from the
+# outside).
+# Usage: retry_exec TIMEOUT PROJECT SERVICE -- cmd args...
+retry_exec() {
+    local timeout="$1"; local project="$2"; local service="$3"; shift 3
+    # Drop a leading `--` separator if present.
+    if [ "${1:-}" = "--" ]; then shift; fi
+    local deadline=$(( $(date +%s) + timeout ))
+    while [ "$(date +%s)" -lt "$deadline" ]; do
+        if "$GOCKER" compose -p "$project" exec -T "$service" "$@" >/dev/null 2>&1; then
+            return 0
+        fi
+        sleep 1
+    done
+    return 1
+}
+
+# retry_exec_capture is like retry_exec but captures stdout on success and echoes
+# it. Returns 0 if the command ever succeeded AND an optional match pattern
+# ($1 when set via RETRY_MATCH env) is present in the output.
+# Usage: RETRY_MATCH='^1$' retry_exec_capture TIMEOUT PROJECT SERVICE -- cmd args...
+retry_exec_capture() {
+    local timeout="$1"; local project="$2"; local service="$3"; shift 3
+    if [ "${1:-}" = "--" ]; then shift; fi
+    local deadline=$(( $(date +%s) + timeout ))
+    local out rc
+    while [ "$(date +%s)" -lt "$deadline" ]; do
+        out=$("$GOCKER" compose -p "$project" exec -T "$service" "$@" 2>/dev/null)
+        rc=$?
+        if [ "$rc" -eq 0 ]; then
+            if [ -z "${RETRY_MATCH:-}" ] || echo "$out" | grep -qE "$RETRY_MATCH"; then
+                printf '%s' "$out"
+                return 0
+            fi
+        fi
+        sleep 1
+    done
     return 1
 }
 

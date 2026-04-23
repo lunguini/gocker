@@ -11,6 +11,8 @@ source "$SCRIPT_DIR/../../lib.sh"
 fail_count=0
 
 # 1. Broker becomes healthy; probe starts only after (depends_on: service_healthy).
+# NB: nerdctl compose ignores `healthcheck:` and `depends_on:`, so we have to
+# probe real readiness below via retry_exec.
 if wait_for_healthy "$PROJECT" 120; then
     log_pass "broker became healthy"
 else
@@ -19,7 +21,9 @@ else
 fi
 
 # 2. Probe can resolve 'broker' by service name over the compose network.
-if gocker_exec "$PROJECT" probe -- rpk -X brokers=broker:9092 cluster info >/dev/null 2>&1; then
+# Poll — the broker may still be starting up Kafka even though the container is
+# running, and `depends_on: service_healthy` is ignored.
+if retry_exec 120 "$PROJECT" probe rpk -X brokers=broker:9092 cluster info; then
     log_pass "probe reached broker via service-name DNS"
 else
     log_fail "probe could not reach broker:9092 — service-name DNS broken?"
@@ -27,8 +31,8 @@ else
 fi
 
 # 3. Create a topic from probe, verify visible from broker.
-gocker_exec "$PROJECT" probe -- rpk -X brokers=broker:9092 topic create e2e-topic >/dev/null 2>&1
-if gocker_exec "$PROJECT" broker -- rpk topic list 2>/dev/null | grep -q '^e2e-topic'; then
+retry_exec 30 "$PROJECT" probe rpk -X brokers=broker:9092 topic create e2e-topic || true
+if retry_exec 30 "$PROJECT" broker sh -c "rpk topic list | grep -q '^e2e-topic'"; then
     log_pass "topic created from probe visible from broker"
 else
     log_fail "topic e2e-topic not visible from broker"

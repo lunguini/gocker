@@ -32,8 +32,8 @@ done
 
 log_section "Summary"
 printf "Passed: %d\n" "${#pass_list[@]}"
-for s in "${pass_list[@]}"; do printf "  ${GREEN}✓${NC} %s\n" "$s"; done
+for s in "${pass_list[@]+"${pass_list[@]}"}"; do printf "  ${GREEN}✓${NC} %s\n" "$s"; done
 printf "Failed: %d\n" "${#fail_list[@]}"
-for s in "${fail_list[@]}"; do printf "  ${RED}✗${NC} %s\n" "$s"; done
+for s in "${fail_list[@]+"${fail_list[@]}"}"; do printf "  ${RED}✗${NC} %s\n" "$s"; done
 
 [ "${#fail_list[@]}" -eq 0 ] || exit 1
