@@ -15,7 +15,7 @@ func TestIntegration_Nerdctl_ContainerLifecycle(t *testing.T) {
 	ctx := context.Background()
 	const name = "gocker-nerdctl-test-lifecycle"
 
-	if err := rt.ImagePull(ctx, testImage); err != nil {
+	if err := rt.ImagePull(ctx, testImage, ImagePullOpts{}); err != nil {
 		t.Fatalf("ImagePull failed: %v", err)
 	}
 
@@ -70,7 +70,7 @@ func TestIntegration_Nerdctl_ImageList(t *testing.T) {
 	rt := NewNerdctl("")
 	ctx := context.Background()
 
-	if err := rt.ImagePull(ctx, testImage); err != nil {
+	if err := rt.ImagePull(ctx, testImage, ImagePullOpts{}); err != nil {
 		t.Fatalf("ImagePull failed: %v", err)
 	}
 

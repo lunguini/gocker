@@ -40,7 +40,7 @@ func skipIfNoVirtualization(t *testing.T, err error) {
 func TestIntegration_PullImage(t *testing.T) {
 	rt := setupRuntime(t)
 
-	if err := rt.ImagePull(context.Background(), testImage); err != nil {
+	if err := rt.ImagePull(context.Background(), testImage, ImagePullOpts{}); err != nil {
 		t.Fatalf("ImagePull failed: %v", err)
 	}
 
@@ -66,7 +66,7 @@ func TestIntegration_ContainerLifecycle(t *testing.T) {
 	const name = "gocker-test-lifecycle"
 
 	// Pull image first
-	if err := rt.ImagePull(context.Background(), testImage); err != nil {
+	if err := rt.ImagePull(context.Background(), testImage, ImagePullOpts{}); err != nil {
 		t.Fatalf("ImagePull failed: %v", err)
 	}
 
@@ -135,7 +135,7 @@ func TestIntegration_ContainerInspect_JSONStructure(t *testing.T) {
 	rt := setupRuntime(t)
 	const name = "gocker-test-inspect"
 
-	if err := rt.ImagePull(context.Background(), testImage); err != nil {
+	if err := rt.ImagePull(context.Background(), testImage, ImagePullOpts{}); err != nil {
 		t.Fatalf("ImagePull failed: %v", err)
 	}
 
