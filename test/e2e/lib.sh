@@ -17,6 +17,11 @@ log_section() { printf "\n${CYAN}=== %s ===${NC}\n" "$*"; }
 # GOCKER is the binary under test. Default to whatever's on PATH; override via env.
 : "${GOCKER:=gocker}"
 
+# COMPOSE_EXTRA holds per-scenario extra args (e.g. `-f a.yml -f b.yml`) that
+# must be prepended to every `gocker compose` invocation. Default empty so
+# scenarios without a compose.args file behave as before.
+: "${COMPOSE_EXTRA:=}"
+
 # wait_for_healthy waits up to $2 seconds for every service in the current
 # compose project to reach a good state. Requires at least one container to
 # exist and that no container is in a bad state (starting, unhealthy, created,
@@ -34,7 +39,8 @@ wait_for_healthy() {
     local deadline=$(( $(date +%s) + timeout ))
     while [ "$(date +%s)" -lt "$deadline" ]; do
         local ps_out
-        ps_out=$("$GOCKER" compose -p "$project" ps --format json 2>/dev/null || true)
+        # shellcheck disable=SC2086
+        ps_out=$("$GOCKER" compose -p "$project" $COMPOSE_EXTRA ps --format json 2>/dev/null || true)
         # No containers yet — keep waiting.
         if [ -z "$ps_out" ] || [ "$ps_out" = "[]" ] || [ "$ps_out" = "null" ]; then
             sleep 1
@@ -52,7 +58,8 @@ wait_for_healthy() {
         sleep 1
     done
     log_fail "services did not become healthy within ${timeout}s"
-    "$GOCKER" compose -p "$project" ps || true
+    # shellcheck disable=SC2086
+    "$GOCKER" compose -p "$project" $COMPOSE_EXTRA ps || true
     return 1
 }
 
@@ -67,7 +74,8 @@ retry_exec() {
     if [ "${1:-}" = "--" ]; then shift; fi
     local deadline=$(( $(date +%s) + timeout ))
     while [ "$(date +%s)" -lt "$deadline" ]; do
-        if "$GOCKER" compose -p "$project" exec -T "$service" "$@" >/dev/null 2>&1; then
+        # shellcheck disable=SC2086
+        if "$GOCKER" compose -p "$project" $COMPOSE_EXTRA exec -T "$service" "$@" >/dev/null 2>&1; then
             return 0
         fi
         sleep 1
@@ -85,7 +93,8 @@ retry_exec_capture() {
     local deadline=$(( $(date +%s) + timeout ))
     local out rc
     while [ "$(date +%s)" -lt "$deadline" ]; do
-        out=$("$GOCKER" compose -p "$project" exec -T "$service" "$@" 2>/dev/null)
+        # shellcheck disable=SC2086
+        out=$("$GOCKER" compose -p "$project" $COMPOSE_EXTRA exec -T "$service" "$@" 2>/dev/null)
         rc=$?
         if [ "$rc" -eq 0 ]; then
             if [ -z "${RETRY_MATCH:-}" ] || echo "$out" | grep -qE "$RETRY_MATCH"; then
@@ -104,13 +113,15 @@ wait_for_log() {
     local project="$1"; local service="$2"; local pattern="$3"; local timeout="${4:-60}"
     local deadline=$(( $(date +%s) + timeout ))
     while [ "$(date +%s)" -lt "$deadline" ]; do
-        if "$GOCKER" compose -p "$project" logs "$service" 2>/dev/null | grep -qE "$pattern"; then
+        # shellcheck disable=SC2086
+        if "$GOCKER" compose -p "$project" $COMPOSE_EXTRA logs "$service" 2>/dev/null | grep -qE "$pattern"; then
             return 0
         fi
         sleep 2
     done
     log_fail "pattern '$pattern' not seen in $service logs within ${timeout}s"
-    "$GOCKER" compose -p "$project" logs "$service" | tail -40 || true
+    # shellcheck disable=SC2086
+    "$GOCKER" compose -p "$project" $COMPOSE_EXTRA logs "$service" | tail -40 || true
     return 1
 }
 
@@ -118,7 +129,8 @@ wait_for_log() {
 # Usage: gocker_exec PROJECT SERVICE -- cmd args...
 gocker_exec() {
     local project="$1"; local service="$2"; shift 2
-    "$GOCKER" compose -p "$project" exec -T "$service" "$@"
+    # shellcheck disable=SC2086
+    "$GOCKER" compose -p "$project" $COMPOSE_EXTRA exec -T "$service" "$@"
 }
 
 # assert_clean_state verifies no containers with the project prefix remain

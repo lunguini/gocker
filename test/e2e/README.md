@@ -29,6 +29,7 @@ scenarios don't collide with each other or with your normal gocker state.
 | `multi-file`      | Multi-file compose merge (`docker-compose.override.yml` wins)                 |
 | `env-substitution`| `.env` file interpolation + `${VAR:-default}` fallback                        |
 | `build`           | Local `build:` context with build-args, BuildKit inside the shared VM          |
+| `compose-stack`   | 3-file stack with user-defined network + named volumes; script reads postgres → writes redis → backs up to volume |
 
 ## Adding a new scenario
 
@@ -39,6 +40,13 @@ scenarios don't collide with each other or with your normal gocker state.
    `gocker_exec`, `retry_exec`, `retry_exec_capture`, plus
    `log_pass` / `log_fail` / `log_info`.
 3. Exit with the count of failed assertions (or 0 on full pass).
+4. If the scenario needs explicit `-f` compose files (e.g. multi-file merge
+   with non-default filenames), drop a `compose.args` file in the scenario
+   dir with a single line like
+   `-f docker-compose.yml -f docker-compose.db.yml -f docker-compose.cache.yml`.
+   The runner resolves relative paths against the scenario dir and prepends
+   the args to every `gocker compose` invocation (including helpers in
+   `lib.sh`, which read `COMPOSE_EXTRA` from the environment).
 
 ### A note on health
 

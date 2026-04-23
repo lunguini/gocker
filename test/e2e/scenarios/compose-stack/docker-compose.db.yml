@@ -1,0 +1,11 @@
+services:
+  db:
+    image: docker.io/library/postgres:16-alpine
+    environment:
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: postgres
+      POSTGRES_USER: postgres
+    networks:
+      - app
+    volumes:
+      - ./init.sql:/docker-entrypoint-initdb.d/init.sql:ro

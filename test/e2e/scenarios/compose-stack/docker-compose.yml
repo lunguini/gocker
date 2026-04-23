@@ -1,0 +1,15 @@
+services:
+  orchestrator:
+    image: docker.io/library/alpine:3
+    networks:
+      - app
+    volumes:
+      - ./orchestrator.sh:/orchestrator.sh:ro
+      - backup:/backup
+    entrypoint: ["/bin/sh", "/orchestrator.sh"]
+
+networks:
+  app:
+
+volumes:
+  backup:

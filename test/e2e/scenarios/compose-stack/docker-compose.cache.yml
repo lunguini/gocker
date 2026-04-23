@@ -1,0 +1,11 @@
+services:
+  cache:
+    image: docker.io/library/redis:7-alpine
+    networks:
+      - app
+    volumes:
+      - redis-data:/data
+    command: ["redis-server", "--appendonly", "yes"]
+
+volumes:
+  redis-data:

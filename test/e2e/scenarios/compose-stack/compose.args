@@ -1,0 +1,1 @@
+-f docker-compose.yml -f docker-compose.db.yml -f docker-compose.cache.yml
