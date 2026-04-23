@@ -23,12 +23,25 @@ if ! command -v "$GOCKER" >/dev/null 2>&1; then
     exit 2
 fi
 
-# Extract top-level verbs from `<cmd> --help` output. urfave/cli and docker's
-# help formats both list subcommands under a COMMANDS: section.
+# Extract top-level verbs from `<cmd> --help` output. Docker's help splits
+# subcommands across multiple sections ("Common Commands:", "Management
+# Commands:", "Swarm Commands:", "Commands:"). urfave/cli uses a single
+# "COMMANDS:" section. Accept any heading that ends in "Commands:" (optional
+# qualifier word allowed) or the uppercase "COMMANDS:" form, and deduplicate
+# since verbs may appear in multiple sections.
 top_level_verbs() {
     local cmd="$1"
     "$cmd" --help 2>/dev/null \
-        | awk '/^(COMMANDS|Commands):/{flag=1; next} /^[A-Z][A-Z]+:/{flag=0} flag && /^[[:space:]]+[a-z]/{print $1}' \
+        | awk '
+            /^([A-Z][a-zA-Z]+ )?Commands:[[:space:]]*$/ {flag=1; next}
+            /^COMMANDS:[[:space:]]*$/ {flag=1; next}
+            /^[A-Za-z][A-Za-z ]*:[[:space:]]*$/ {flag=0}
+            flag && /^[[:space:]]+[a-z]/ {
+                v=$1
+                sub(/\*$/, "", v)   # strip "*" marker docker uses for plugins
+                print v
+            }
+        ' \
         | sort -u
 }
 
@@ -39,14 +52,15 @@ is_ignored() {
 
 gocker_has_flag() {
     local verb="$1"; local flag="$2"
-    "$GOCKER" "$verb" --help 2>/dev/null | grep -qE "^\s+${flag}\b"
+    "$GOCKER" help "$verb" 2>/dev/null | grep -qE "(^|[[:space:],])${flag}([[:space:],]|\$)"
 }
 
 extract_flags() {
     local cmd="$1"; local verb="$2"
     "$cmd" "$verb" --help 2>/dev/null \
         | awk '/^OPTIONS:|^Options:/{flag=1; next} /^[A-Z][A-Z]+:/{flag=0} flag' \
-        | grep -oE -- '-[-[:alnum:]]+' \
+        | grep -oE '^[[:space:]]+(-[a-zA-Z]|--[a-zA-Z][-a-zA-Z0-9]*)' \
+        | sed 's/^[[:space:]]*//' \
         | sort -u
 }
 
@@ -64,12 +78,13 @@ extract_flags() {
     echo "| docker verb | gocker status | notes |"
     echo "|---|---|---|"
 
+    gocker_verbs=$(top_level_verbs "$GOCKER")
     for verb in $(top_level_verbs "$DOCKER"); do
         if is_ignored "$verb"; then
             echo "| \`$verb\` | ➖ ignored | deliberately not supported |"
             continue
         fi
-        if "$GOCKER" "$verb" --help >/dev/null 2>&1; then
+        if echo "$gocker_verbs" | grep -qxF "$verb"; then
             echo "| \`$verb\` | ✅ present | — |"
         else
             echo "| \`$verb\` | ❌ missing | no \`gocker $verb\` |"
@@ -84,7 +99,7 @@ extract_flags() {
 
     for verb in $(top_level_verbs "$DOCKER"); do
         if is_ignored "$verb"; then continue; fi
-        if ! "$GOCKER" "$verb" --help >/dev/null 2>&1; then continue; fi
+        if ! echo "$gocker_verbs" | grep -qxF "$verb"; then continue; fi
         missing=""
         for flag in $(extract_flags "$DOCKER" "$verb"); do
             if ! gocker_has_flag "$verb" "$flag"; then

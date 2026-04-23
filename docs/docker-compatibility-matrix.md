@@ -10,44 +10,97 @@ Legend: ✅ present, ❌ missing, ➖ ignored (see `test/compat/ignored.txt`)
 
 | docker verb | gocker status | notes |
 |---|---|---|
+| `agent` | ❌ missing | no `gocker agent` |
+| `ai` | ✅ present | — |
 | `attach` | ❌ missing | no `gocker attach` |
+| `bake` | ❌ missing | no `gocker bake` |
+| `build` | ✅ present | — |
+| `builder` | ❌ missing | no `gocker builder` |
+| `buildx` | ➖ ignored | deliberately not supported |
+| `checkpoint` | ❌ missing | no `gocker checkpoint` |
 | `commit` | ❌ missing | no `gocker commit` |
+| `compose` | ✅ present | — |
+| `config` | ❌ missing | no `gocker config` |
+| `container` | ❌ missing | no `gocker container` |
+| `context` | ❌ missing | no `gocker context` |
 | `cp` | ❌ missing | no `gocker cp` |
 | `create` | ❌ missing | no `gocker create` |
-| `daemon` | ✅ present | — |
-| `default` | ❌ missing | no `gocker default` |
+| `debug` | ❌ missing | no `gocker debug` |
+| `desktop` | ❌ missing | no `gocker desktop` |
+| `dhi` | ❌ missing | no `gocker dhi` |
 | `diff` | ❌ missing | no `gocker diff` |
 | `events` | ❌ missing | no `gocker events` |
+| `exec` | ✅ present | — |
 | `export` | ❌ missing | no `gocker export` |
+| `extension` | ❌ missing | no `gocker extension` |
 | `history` | ❌ missing | no `gocker history` |
+| `image` | ✅ present | — |
+| `images` | ✅ present | — |
 | `import` | ❌ missing | no `gocker import` |
+| `info` | ✅ present | — |
+| `init` | ❌ missing | no `gocker init` |
 | `inspect` | ✅ present | — |
 | `kill` | ❌ missing | no `gocker kill` |
 | `load` | ❌ missing | no `gocker load` |
+| `login` | ❌ missing | no `gocker login` |
+| `logout` | ❌ missing | no `gocker logout` |
 | `logs` | ✅ present | — |
+| `manifest` | ➖ ignored | deliberately not supported |
+| `mcp` | ❌ missing | no `gocker mcp` |
+| `model` | ❌ missing | no `gocker model` |
+| `network` | ✅ present | — |
+| `node` | ➖ ignored | deliberately not supported |
+| `offload` | ❌ missing | no `gocker offload` |
 | `pause` | ❌ missing | no `gocker pause` |
+| `plugin` | ➖ ignored | deliberately not supported |
 | `port` | ❌ missing | no `gocker port` |
+| `ps` | ✅ present | — |
+| `pull` | ✅ present | — |
+| `push` | ✅ present | — |
 | `rename` | ❌ missing | no `gocker rename` |
 | `restart` | ❌ missing | no `gocker restart` |
 | `rm` | ✅ present | — |
 | `rmi` | ✅ present | — |
+| `run` | ✅ present | — |
+| `sandbox` | ✅ present | — |
 | `save` | ❌ missing | no `gocker save` |
+| `sbom` | ❌ missing | no `gocker sbom` |
+| `scout` | ❌ missing | no `gocker scout` |
+| `search` | ❌ missing | no `gocker search` |
+| `secret` | ➖ ignored | deliberately not supported |
+| `service` | ➖ ignored | deliberately not supported |
+| `stack` | ➖ ignored | deliberately not supported |
 | `start` | ✅ present | — |
 | `stats` | ❌ missing | no `gocker stats` |
 | `stop` | ✅ present | — |
+| `swarm` | ➖ ignored | deliberately not supported |
+| `system` | ✅ present | — |
 | `tag` | ❌ missing | no `gocker tag` |
 | `top` | ❌ missing | no `gocker top` |
 | `unpause` | ❌ missing | no `gocker unpause` |
 | `update` | ❌ missing | no `gocker update` |
+| `version` | ❌ missing | no `gocker version` |
+| `volume` | ✅ present | — |
 | `wait` | ❌ missing | no `gocker wait` |
 
 ## Flag diff for shared commands
 
 | command | docker flags gocker lacks |
 |---|---|
-| `inspect` | `--format` `--size` `--type` `-f` `-s` |
-| `logs` | `--details` `--follow` `--since` `--tail` `--timestamps` `--until` `-01-02T13` `-f` `-n` `-t` |
-| `rm` | `--force` `--link` `--volumes` `-f` `-l` `-v` |
-| `rmi` | `--force` `--no-prune` `--platform` `-f` |
-| `start` | `--attach` `--checkpoint` `--checkpoint-dir` `--detach-keys` `--interactive` `-a` `-i` |
-| `stop` | `--signal` `--timeout` `-s` `-t` |
+| `ai` | `--send-files` `--send-project-structure` `--write-files` `-C` `-s` |
+| `build` | `--add-host` `--allow` `--annotation` `--attest` `--build-arg` `--build-context` `--builder` `--cache-from` `--cache-to` `--call` `--cgroup-parent` `--check` `--iidfile` `--label` `--load` `--metadata-file` `--network` `--no-cache` `--no-cache-filter` `--platform` `--policy` `--progress` `--provenance` `--pull` `--push` `--sbom` `--secret` `--shm-size` `--ssh` `--target` `--ulimit` `-D` `-f` `-o` `-q` `-t` |
+| `compose` | `--all-resources` `--ansi` `--compatibility` `--dry-run` `--env-file` `--parallel` `--profile` `--progress` `--project-directory` `-f` `-p` |
+| `exec` | `--detach-keys` `--env-file` `--privileged` `-d` `-e` `-i` `-t` `-u` `-w` |
+| `images` | `--digests` `--format` `--no-trunc` `--tree` `-a` `-f` `-q` |
+| `info` | `-f` |
+| `inspect` | `--type` `-f` `-s` |
+| `logs` | `--details` `--since` `--until` `-n` `-t` |
+| `ps` | `--format` `--no-trunc` `-f` `-l` `-n` `-s` |
+| `pull` | `--platform` `-a` `-q` |
+| `push` | `--platform` `-a` `-q` |
+| `rm` | `-l` `-v` |
+| `rmi` | `--no-prune` `--platform` `-f` |
+| `run` | `--add-host` `--annotation` `--blkio-weight` `--blkio-weight-device` `--cap-add` `--cap-drop` `--cgroup-parent` `--cgroupns` `--cidfile` `--cpu-count` `--cpu-percent` `--cpu-period` `--cpu-quota` `--cpu-rt-period` `--cpu-rt-runtime` `--cpus` `--cpuset-cpus` `--cpuset-mems` `--detach-keys` `--device` `--device-cgroup-rule` `--device-read-bps` `--device-read-iops` `--device-write-bps` `--device-write-iops` `--dns` `--dns-option` `--dns-search` `--domainname` `--entrypoint` `--env-file` `--expose` `--gpus` `--group-add` `--health-cmd` `--health-interval` `--health-retries` `--health-start-interval` `--health-start-period` `--health-timeout` `--init` `--io-maxbandwidth` `--io-maxiops` `--ip` `--ip6` `--ipc` `--isolation` `--label-file` `--link` `--link-local-ip` `--log-driver` `--log-opt` `--mac-address` `--memory-reservation` `--memory-swap` `--memory-swappiness` `--mount` `--name` `--network` `--network-alias` `--no-healthcheck` `--oom-kill-disable` `--oom-score-adj` `--pid` `--pids-limit` `--platform` `--privileged` `--pull` `--read-only` `--restart` `--rm` `--runtime` `--security-opt` `--shm-size` `--sig-proxy` `--stop-signal` `--stop-timeout` `--storage-opt` `--sysctl` `--tmpfs` `--ulimit` `--use-api-socket` `--userns` `--uts` `--volume-driver` `--volumes-from` `-P` `-a` `-c` `-d` `-e` `-h` `-i` `-l` `-m` `-p` `-q` `-t` `-u` `-v` `-w` |
+| `sandbox` | `-D` |
+| `start` | `--checkpoint` `--checkpoint-dir` `--detach-keys` `-a` `-i` |
+| `stop` | `-s` `-t` |
