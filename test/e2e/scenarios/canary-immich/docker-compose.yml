@@ -1,0 +1,27 @@
+services:
+  db:
+    image: docker.io/tensorchord/pgvecto-rs:pg16-v0.2.0
+    environment:
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_USER: postgres
+      POSTGRES_DB: immich
+    volumes:
+      - db:/var/lib/postgresql/data
+
+  redis:
+    image: docker.io/library/redis:6.2-alpine
+
+  server:
+    image: ghcr.io/immich-app/immich-server:release
+    environment:
+      DB_HOSTNAME: db
+      DB_PASSWORD: postgres
+      DB_USERNAME: postgres
+      DB_DATABASE_NAME: immich
+      REDIS_HOSTNAME: redis
+    depends_on:
+      - db
+      - redis
+
+volumes:
+  db:
