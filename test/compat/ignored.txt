@@ -1,0 +1,9 @@
+buildx
+swarm
+stack
+secret
+trust
+manifest
+plugin
+service
+node
