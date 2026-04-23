@@ -2,9 +2,6 @@ package setup
 
 import (
 	"fmt"
-	"runtime"
-
-	"golang.org/x/sys/unix"
 )
 
 // defaultResources returns (cpu, memory) defaults for the given isolation mode,
@@ -21,30 +18,7 @@ func defaultResources(isolation string, hostCPUs, hostMemGB int) (int, string) {
 		cpuFrac, memFrac = 4, 4
 	}
 
-	cpu := hostCPUs / cpuFrac
-	if cpu < 2 {
-		cpu = 2
-	}
-	if cpu > cpuCap {
-		cpu = cpuCap
-	}
-
-	mem := hostMemGB / memFrac
-	if mem < 2 {
-		mem = 2
-	}
-	if mem > memCap {
-		mem = memCap
-	}
+	cpu := min(max(hostCPUs/cpuFrac, 2), cpuCap)
+	mem := min(max(hostMemGB/memFrac, 2), memCap)
 	return cpu, fmt.Sprintf("%dG", mem)
-}
-
-// detectHostResources returns (cpus, memoryGiB) from the host OS.
-func detectHostResources() (int, int) {
-	cpus := runtime.NumCPU()
-	mem := 8 // fallback
-	if v, err := unix.SysctlUint64("hw.memsize"); err == nil {
-		mem = int(v / (1024 * 1024 * 1024))
-	}
-	return cpus, mem
 }
