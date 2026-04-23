@@ -43,7 +43,7 @@ go install github.com/lunguini/gocker@latest
 ## Getting Started
 
 ```bash
-# Check prerequisites and install Apple Container if needed
+# First-run wizard — see "Setup" below for what it asks
 gocker setup
 
 # Run a container
@@ -51,6 +51,23 @@ gocker run ubuntu:latest echo "hello from a microVM"
 
 # Run an interactive container
 gocker run -it ubuntu:latest /bin/bash
+```
+
+## Setup
+
+`gocker setup` is the first-run flow. It checks prerequisites, installs Apple Container CLI if missing, and then runs a short interactive wizard:
+
+- **Isolation mode** — `full` / `hybrid` / `shared` (see [Isolation Modes](#isolation-modes)). The prompt explains the trade-offs.
+- **VM resources** — CPU and memory for the shared VM, defaulted from your host specs and chosen mode.
+- **Shell integration** *(opt-in)* — adds `DOCKER_HOST` and `TESTCONTAINERS_DOCKER_SOCKET_OVERRIDE` to your shell rc (`bash` / `zsh` / `fish`), inside sentinel-marked blocks. Skipped if your rc already exports DOCKER_HOST to the gocker socket.
+- **Docker context** *(opt-in)* — creates a `gocker` docker context and makes it active, so `docker` commands route through gocker.
+
+Re-running `gocker setup` is safe — existing config is preserved unless you change an answer.
+
+For CI / non-interactive environments:
+
+```bash
+gocker setup --yes   # uses 'shared' isolation, skips shell + docker-context prompts
 ```
 
 ## Usage
@@ -132,7 +149,7 @@ sandbox:
 
 ## Isolation Modes
 
-Configure how containers are isolated via `~/.gocker/config.yaml`:
+Pick the mode during `gocker setup`, or edit `~/.gocker/config.yaml` directly:
 
 ```yaml
 isolation: hybrid  # full | hybrid | shared
@@ -216,13 +233,16 @@ docker build -t myimg .                     gocker build -t myimg .
 
 ### Socket path
 
-Docker tools expect a socket at `/var/run/docker.sock`. With gocker, set `DOCKER_HOST` to point to the gocker socket:
+Docker tools expect a socket at `/var/run/docker.sock`. The easiest way to wire this up is to run `gocker setup` and accept the shell-integration and docker-context prompts — they handle `DOCKER_HOST`, `TESTCONTAINERS_DOCKER_SOCKET_OVERRIDE`, and the `docker` CLI context for you.
+
+Manual alternatives:
 
 ```bash
+# Export so docker / SDK clients pick it up
 export DOCKER_HOST=unix://$HOME/.gocker/gocker.sock
 ```
 
-Or mount the gocker socket when running tools that need it:
+Or mount the gocker socket when running tools inside a container:
 
 ```bash
 -v ~/.gocker/gocker.sock:/var/run/docker.sock
@@ -279,7 +299,7 @@ make template-push          # Build and push all template images
 - [x] Volume management (`volume create/ls/rm/inspect`)
 - [x] Docker REST API daemon on Unix socket (`gocker daemon start`)
 - [x] AI sandbox — `gocker sandbox run claude ./` with config sync
-- [x] Auto-setup (`gocker setup` installs Apple Container CLI)
+- [x] Interactive setup wizard (`gocker setup` installs Apple Container CLI, configures isolation mode + VM resources, optionally wires shell + docker context; `--yes` for CI)
 - [x] Template images published to Docker Hub
 - [x] `gocker compose up/down/ps/logs/restart` with standard docker-compose.yml
 - [x] Smoke test suite (`make smoke`) for end-to-end CLI validation
