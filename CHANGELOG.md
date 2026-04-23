@@ -1,5 +1,13 @@
 # Changelog
 
+## v0.7.0
+
+- feat(setup): interactive setup wizard with isolation-mode selector and host-aware resource defaults
+- feat(setup): opt-in shell integration (bash/zsh/fish) with idempotent sentinel-marked blocks
+- feat(setup): opt-in docker context creation pointing at gocker socket
+- feat(setup): `gocker setup --yes` for non-interactive/CI use (defaults to shared isolation)
+- feat(config): add Save() for writing ~/.gocker/config.yaml
+
 ## v0.6.5
 
 - fix: harden ResolveMountParent against symlink-based blocklist bypass
