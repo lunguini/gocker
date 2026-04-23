@@ -2,14 +2,13 @@
 
 ## v0.6.4
 
-- fix: inject translated --project-directory into nerdctl compose when no -f is given
-- test: add hasFileFlag unit tests covering -f, --file, --project-directory variants
+- fix: inject --project-directory for compose when no -f is given
+- fix: reshape volume inspect + add Docker SDK compat test harness
+- docs: update CHANGELOG.md for v0.6.2
 
 ## v0.6.3
 
-- fix: reshape volume inspect API response for Docker SDK compatibility
-- test: add Docker SDK compatibility tests for all JSON-returning API endpoints
-- docs: note compose network label ownership and SDK compat test harness
+- fix: reshape volume inspect + add Docker SDK compat test harness
 
 ## v0.6.2
 
