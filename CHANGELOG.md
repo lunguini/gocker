@@ -2,38 +2,56 @@
 
 ## v0.7.1
 
-- fix(setup): guard `detectHostResources` with build tags so Linux builds don't hit `undefined: unix.SysctlUint64` (broke v0.7.0 release pipeline)
-- fix(tests): update `//go:build integration` call sites for the `ImagePullOpts` signature change — `make test-all` now compiles on all targets
+- docs: changelog for v0.7.1
+- fix(tests): update integration ImagePull callsites to new ImagePullOpts signature
+- docs: update CHANGELOG.md for v0.7.0
 
 ## v0.7.0
 
-Setup & config:
-
-- feat(setup): interactive setup wizard with isolation-mode selector and host-aware resource defaults
-- feat(setup): opt-in shell integration (bash/zsh/fish) with idempotent sentinel-marked blocks
-- feat(setup): opt-in docker context creation pointing at gocker socket
-- feat(setup): `gocker setup --yes` for non-interactive/CI use (defaults to shared isolation)
-- feat(config): add `Save()` for writing `~/.gocker/config.yaml`
-
-CLI & API:
-
-- feat(image): new `gocker image` subcommand group (`ls`, `rm`) mirroring Docker's nested style; both `gocker rmi <name>` and `gocker image rm <name>` now resolve name-only refs to every matching tag, accept short image IDs (6+ hex chars), and reject ambiguous ID prefixes
-- feat(pull): `gocker pull` accepts `--platform`, `--max-concurrent-downloads`/`-j`, and `--progress`; auto-detects TTY so pipe/CI output stops getting cluttered with ANSI escapes
-- feat(api): `docker run -d` works through a `docker context` pointing at gocker — `NetworkMode: "default"` no longer leaks through as `--network default` to the backend
-- feat(api): new `GET /system/df` endpoint (used by `docker system df` and dashboards like lazydocker)
-- fix(cli): `gocker images rm <name>` and other leaf commands now reject unexpected positional args with a clear error instead of silently running the default action
-
-Testing & tooling:
-
-- test(e2e): new `make e2e` suite with 9 scenarios covering redis/postgres/redpanda, multi-file compose with cross-file service DNS, 3-file data-flow stack, env substitution, local builds, and real-world canaries (wordpress+mariadb, immich)
-- test(cli): walk-the-command-tree test that refuses silent positional-arg swallowing on every leaf command
-- test(compat): `make compat-audit` generates a markdown matrix diffing `docker <cmd> --help` vs `gocker <cmd> --help`; CI job fails if the matrix drifts
-- test(api): expand the SDK-shape harness to cover `types.DiskUsage` and `events.Message` decode
-
-Docs:
-
-- docs: document the setup wizard flow and `--yes` in README
-- docs: track `/containers/{id}/attach`, `/containers/{id}/wait`, image-pull perf, and live SDK harness as open follow-ups in README roadmap
+- fix(setup): guard detectHostResources with build tags for Linux builds
+- docs: changelog for v0.8.0
+- docs(roadmap): note /containers/{id}/wait gap alongside attach
+- feat(api): drop NetworkMode=default passthrough, add /system/df, verify events shape
+- docs(roadmap): track Docker CLI interop gaps found via real docker context
+- docs(compat): regenerate matrix against real docker on PATH
+- docs(e2e): document canary scenarios + flakiness expectations
+- test(e2e): add immich canary scenario (db+redis+server minimal slice)
+- test(e2e): add wordpress+mariadb canary scenario
+- docs(roadmap): note live SDK e2e harness blocked on virtiofs socket semantics
+- ci(compat): add make compat-audit target and CI drift guard
+- test(compat): tighten verb + flag parsers in audit script
+- test(compat): add docker CLI compatibility audit + generated matrix
+- test(cli): assert every leaf command rejects or declares positional args
+- feat(image): resolve name-only and short-ID refs before remove
+- feat(image): add 'image' subcommand group; reject extra args on 'images'
+- feat(pull): expose platform/concurrency flags, auto-detect TTY for progress
+- test(e2e): add compose-stack scenario exercising 3-file merge with real data flow
+- test(e2e): expand multi-file scenario to cover cross-file service-DNS interaction
+- docs: document gocker setup wizard, --yes flag, and shell/docker-context integration
+- ci: add manually-triggered e2e workflow (self-hosted runner)
+- docs(e2e): document compose test suite and how to add new scenarios
+- test(e2e): harden wait_for_healthy and timing for aggregate runs
+- test(e2e): add local build scenario exercising BuildKit in shared VM
+- test(e2e): add env-substitution scenario (.env + inline defaults)
+- test(e2e): add multi-file compose merge scenario (override wins, new keys add)
+- test(e2e): add redpanda scenario covering depends_on health gating and service DNS
+- test(e2e): add postgres scenario exercising PGDATA lost+found workaround
+- test(e2e): add redis scenario covering healthcheck and volume persistence
+- test(e2e): add compose scenario runner framework
+- docs: changelog for v0.7.0 setup wizard
+- docs: document gocker setup wizard and --yes flag
+- feat(setup): wire --yes flag and call wizard after install
+- feat(setup): orchestrate wizard with config persistence and opt-in integrations
+- feat(setup): configure docker context with idempotent detection
+- fix(setup): line-parse rc detection to skip comments and handle fish syntax
+- feat(setup): idempotent shell rc integration with sentinel markers
+- feat(setup): add isolation-mode selector with explanations
+- refactor(setup): modernize with min/max and defer host detection to wizard
+- feat(setup): compute host-aware VM resource defaults per isolation mode
+- refactor(setup): share bufio.Reader across prompts to avoid buffer loss
+- feat(setup): add prompt helpers with TTY detection
+- feat(config): add Save for writing ~/.gocker/config.yaml
+- docs: update CHANGELOG.md for v0.6.5
 
 ## v0.6.5
 
