@@ -1,0 +1,7 @@
+services:
+  app:
+    build:
+      context: .
+      args:
+        BUILD_MARKER: "e2e-verified"
+    command: ["/bin/sh", "-c", "sleep infinity"]
