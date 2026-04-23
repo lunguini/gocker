@@ -1,0 +1,8 @@
+services:
+  app:
+    image: docker.io/library/alpine:3
+    environment:
+      APP_VERSION: "${APP_VERSION}"
+      GREETING: "${GREETING}"
+      FALLBACK: "${NOT_SET:-default-value}"
+    command: ["/bin/sh", "-c", "sleep infinity"]
