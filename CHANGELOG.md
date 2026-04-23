@@ -1,5 +1,10 @@
 # Changelog
 
+## v0.6.4
+
+- fix: inject translated --project-directory into nerdctl compose when no -f is given
+- test: add hasFileFlag unit tests covering -f, --file, --project-directory variants
+
 ## v0.6.3
 
 - fix: reshape volume inspect API response for Docker SDK compatibility

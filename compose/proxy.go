@@ -31,6 +31,17 @@ func (p *Proxy) Exec(ctx context.Context, args []string, interactive bool) error
 
 	translated := p.translateArgs(args)
 
+	// If no explicit file or project-directory flag, inject --project-directory
+	// so nerdctl finds compose files in the translated host CWD.
+	mounts := p.manager.Mounts()
+	if !hasFileFlag(translated) {
+		if cwd, err := os.Getwd(); err == nil {
+			if vmCwd, ok := sharedvm.TranslatePath(cwd, mounts); ok {
+				translated = append([]string{"--project-directory", vmCwd}, translated...)
+			}
+		}
+	}
+
 	// Build: container exec -i <vm> nerdctl compose <args>
 	// Use -i only (not -t) for the outer exec. Apple's container exec with -t
 	// conflicts with nerdctl's -T flag and causes "Operation not supported by
@@ -39,7 +50,6 @@ func (p *Proxy) Exec(ctx context.Context, args []string, interactive bool) error
 
 	// Forward environment variables that compose files may reference.
 	// Filter out system vars and translate host paths in values.
-	mounts := p.manager.Mounts()
 	for _, env := range os.Environ() {
 		key, val, _ := strings.Cut(env, "=")
 		if shouldForwardEnv(key) {
@@ -83,6 +93,20 @@ func (p *Proxy) translateArgs(args []string) []string {
 		}
 	}
 	return result
+}
+
+// hasFileFlag returns true if args contain -f, --file, or --project-directory.
+func hasFileFlag(args []string) bool {
+	for _, a := range args {
+		switch a {
+		case "-f", "--file", "--project-directory":
+			return true
+		}
+		if strings.HasPrefix(a, "-f=") || strings.HasPrefix(a, "--file=") || strings.HasPrefix(a, "--project-directory=") {
+			return true
+		}
+	}
+	return false
 }
 
 // shouldForwardEnv returns true for environment variables that should be
