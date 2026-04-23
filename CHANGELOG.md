@@ -1,5 +1,9 @@
 # Changelog
 
+## v0.6.2
+
+- fix: reshape network inspect API response for Docker SDK compatibility
+
 ## v0.6.1
 
 - fix: enable POSIX short flag composition (-it, -ti, etc.)

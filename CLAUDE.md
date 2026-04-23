@@ -2,6 +2,10 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+## Commit conventions
+
+- Do not add `Co-Authored-By: Claude` trailers to commit messages in this repo.
+
 ## What is Gocker
 
 Docker-compatible CLI and REST API daemon that wraps Apple's `container` CLI on macOS 26+ and nerdctl on Linux. Each container on macOS is a lightweight Linux microVM via `Virtualization.framework`. The killer feature is `gocker sandbox` — AI agent sandboxing with hardware-level isolation.
