@@ -30,6 +30,8 @@ scenarios don't collide with each other or with your normal gocker state.
 | `env-substitution`| `.env` file interpolation + `${VAR:-default}` fallback                        |
 | `build`           | Local `build:` context with build-args, BuildKit inside the shared VM          |
 | `compose-stack`   | 3-file stack with user-defined network + named volumes; script reads postgres → writes redis → backs up to volume |
+| `canary-wordpress`| Real-world public stack: WordPress + MariaDB. Confirms services boot, WP connects to DB, and HTTP responds with a 200/302 |
+| `canary-immich`   | Real-world public stack: Immich (db+redis+server minimal slice). Confirms the NestJS app bootstraps and connects to db + redis |
 
 ## Adding a new scenario
 
@@ -64,3 +66,13 @@ investigating. If a scenario consistently fails:
 - Check VM resources: `gocker daemon vm update --cpus 4 --memory 8G`
 - Check for orphan state: `gocker ps -a | grep gocker-e2e-`
 - Inspect logs: `gocker compose -p gocker-e2e-<scenario> logs`
+
+### Canary-specific notes
+
+Canary scenarios (`canary-wordpress`, `canary-immich`) pull ~1-2GB of images
+from public registries on first run. Expect:
+- **First run** on cold caches: 5-10 minutes per scenario just for image pulls.
+- **Warm runs**: ~30-60 seconds each.
+- **Registry hiccups**: Docker Hub and ghcr.io occasionally rate-limit or 503
+  briefly. Re-run before investigating. Persistent failures after two retries
+  are real bugs.
