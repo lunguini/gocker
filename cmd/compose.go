@@ -17,6 +17,7 @@ func newComposeCmd(eng engine.Runtime) *cli.Command {
 	return &cli.Command{
 		Name:            "compose",
 		Usage:           "Manage multi-container applications with Compose",
+		ArgsUsage:       "[SUBCOMMAND] [ARGS...]",
 		SkipFlagParsing: true,
 		Action: func(ctx context.Context, cmd *cli.Command) error {
 			return runComposeProxy(ctx, cmd, eng)

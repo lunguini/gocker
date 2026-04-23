@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"strings"
 
 	"github.com/lunguini/gocker/engine"
 	"github.com/lunguini/gocker/format"
@@ -19,6 +20,9 @@ func newPsCmd(eng engine.Runtime) *cli.Command {
 			&cli.BoolFlag{Name: "quiet", Aliases: []string{"q"}, Usage: "Only display container IDs"},
 		},
 		Action: func(ctx context.Context, cmd *cli.Command) error {
+			if cmd.Args().Len() > 0 {
+				return cli.Exit("unexpected arguments: "+strings.Join(cmd.Args().Slice(), " "), 2)
+			}
 			containers, err := eng.ContainerList(ctx, cmd.Bool("all"))
 			if err != nil {
 				return err

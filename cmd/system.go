@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"runtime"
+	"strings"
 
 	"github.com/lunguini/gocker/engine"
 	"github.com/urfave/cli/v3"
@@ -11,6 +12,9 @@ import (
 
 func infoAction(eng engine.Runtime) cli.ActionFunc {
 	return func(ctx context.Context, cmd *cli.Command) error {
+		if cmd.Args().Len() > 0 {
+			return cli.Exit("unexpected arguments: "+strings.Join(cmd.Args().Slice(), " "), 2)
+		}
 		fmt.Println("Gocker version: 0.1.0")
 		fmt.Printf("OS/Arch: %s/%s\n", runtime.GOOS, runtime.GOARCH)
 		fmt.Printf("Container binary: %s\n", eng.BinaryPath())
@@ -52,6 +56,9 @@ func newSystemCmd(eng engine.Runtime) *cli.Command {
 				Name:  "prune",
 				Usage: "Remove stopped containers and unused images",
 				Action: func(ctx context.Context, cmd *cli.Command) error {
+					if cmd.Args().Len() > 0 {
+						return cli.Exit("unexpected arguments: "+strings.Join(cmd.Args().Slice(), " "), 2)
+					}
 					containers, err := eng.ContainerList(ctx, true)
 					if err != nil {
 						return err

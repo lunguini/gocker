@@ -38,6 +38,12 @@ func newImageCmd(eng engine.Runtime) *cli.Command {
 				Name:  "ls",
 				Usage: "List images",
 				Action: func(ctx context.Context, cmd *cli.Command) error {
+					if cmd.Args().Len() > 0 {
+						return cli.Exit(fmt.Sprintf(
+							"unexpected arguments: %v\n\nTo remove an image: gocker image rm <image>",
+							cmd.Args().Slice(),
+						), 2)
+					}
 					return listImages(ctx, cmd, eng)
 				},
 			},

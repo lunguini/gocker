@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"strings"
 
 	"github.com/lunguini/gocker/engine"
 	"github.com/lunguini/gocker/format"
@@ -36,6 +37,9 @@ func newVolumeCmd(eng engine.Runtime) *cli.Command {
 				Aliases: []string{"list"},
 				Usage:   "List volumes",
 				Action: func(ctx context.Context, cmd *cli.Command) error {
+					if cmd.Args().Len() > 0 {
+						return cli.Exit("unexpected arguments: "+strings.Join(cmd.Args().Slice(), " "), 2)
+					}
 					volumes, err := eng.VolumeList(ctx)
 					if err != nil {
 						return err

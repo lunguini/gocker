@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/lunguini/gocker/config"
 	"github.com/lunguini/gocker/engine"
@@ -82,6 +83,9 @@ func newSandboxCmd(eng engine.Runtime) *cli.Command {
 				Aliases: []string{"list"},
 				Usage:   "List sandboxes",
 				Action: func(ctx context.Context, cmd *cli.Command) error {
+					if cmd.Args().Len() > 0 {
+						return cli.Exit("unexpected arguments: "+strings.Join(cmd.Args().Slice(), " "), 2)
+					}
 					sandboxes, err := mgr.List()
 					if err != nil {
 						return err

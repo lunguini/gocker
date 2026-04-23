@@ -16,6 +16,9 @@ func newAICmd(eng engine.Runtime) *cli.Command {
 		Name:  "ai",
 		Usage: "Output AI-friendly CLI reference and workspace context",
 		Action: func(ctx context.Context, cmd *cli.Command) error {
+			if cmd.Args().Len() > 0 {
+				return cli.Exit("unexpected arguments: "+strings.Join(cmd.Args().Slice(), " "), 2)
+			}
 			printAIContext(ctx, eng)
 			return nil
 		},
