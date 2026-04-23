@@ -26,6 +26,19 @@ go test ./engine/...  # run tests for a single package
 go test ./compose/... # run compose tests
 ```
 
+## Setup Wizard
+
+`gocker setup` is the first-run flow. It installs Apple Container CLI and then runs an interactive configuration wizard:
+
+- **Isolation mode** — full / hybrid / shared (see Key Design Decisions). Explanations printed before the prompt.
+- **VM resources** — CPU/memory, defaulted from host specs and the chosen isolation mode.
+- **Shell integration** (opt-in) — writes `DOCKER_HOST` and `TESTCONTAINERS_DOCKER_SOCKET_OVERRIDE` to `~/.bashrc`, `~/.zshrc`, or `~/.config/fish/config.fish` inside sentinel-marked blocks. Idempotent; skips if existing exports already point at the gocker socket.
+- **Docker context** (opt-in) — creates a `gocker` docker context and makes it active.
+
+Non-interactive mode: `gocker setup --yes` uses `shared` isolation (the CI-friendly default), writes `~/.gocker/config.yaml`, and skips all shell/dotfile/docker-context modifications.
+
+Re-running `gocker setup` is safe: existing config is preserved unless the user picks a different answer. Shell blocks use `# >>> gocker setup >>>` / `# <<< gocker setup <<<` markers for clean diffing and removal.
+
 ## Architecture
 
 ```
