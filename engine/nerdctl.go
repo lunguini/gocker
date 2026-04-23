@@ -207,8 +207,15 @@ func (n *NerdctlRuntime) ContainerInspect(ctx context.Context, nameOrID string) 
 
 // --- Image operations ---
 
-func (n *NerdctlRuntime) ImagePull(ctx context.Context, image string) error {
-	return n.ExecInteractive(ctx, "pull", image)
+func (n *NerdctlRuntime) ImagePull(ctx context.Context, image string, opts ImagePullOpts) error {
+	args := []string{"pull"}
+	if opts.Platform != "" {
+		args = append(args, "--platform", opts.Platform)
+	}
+	// nerdctl doesn't expose --max-concurrent-downloads at the CLI (containerd
+	// daemon config) or a --progress flag; silently drop those opts.
+	args = append(args, image)
+	return n.ExecInteractive(ctx, args...)
 }
 
 func (n *NerdctlRuntime) ImagePush(ctx context.Context, image string) error {

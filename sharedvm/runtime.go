@@ -207,11 +207,22 @@ func (s *SharedVMRuntime) ContainerInspect(ctx context.Context, nameOrID string)
 
 // --- Image operations ---
 
-func (s *SharedVMRuntime) ImagePull(ctx context.Context, image string) error {
+func (s *SharedVMRuntime) ImagePull(ctx context.Context, image string, opts engine.ImagePullOpts) error {
 	if err := s.manager.EnsureRunning(ctx); err != nil {
 		return err
 	}
-	vmArgs := s.proxyArgs(true, "pull", image)
+	pullArgs := []string{"pull"}
+	if opts.Platform != "" {
+		pullArgs = append(pullArgs, "--platform", opts.Platform)
+	}
+	if opts.Progress != "" {
+		pullArgs = append(pullArgs, "--progress", opts.Progress)
+	}
+	if opts.MaxConcurrent > 0 {
+		pullArgs = append(pullArgs, "--max-concurrent-downloads", fmt.Sprintf("%d", opts.MaxConcurrent))
+	}
+	pullArgs = append(pullArgs, image)
+	vmArgs := s.proxyArgs(true, pullArgs...)
 	return s.apple.ExecInteractive(ctx, vmArgs...)
 }
 

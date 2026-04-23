@@ -31,7 +31,7 @@ type Runtime interface {
 	ContainerInspect(ctx context.Context, nameOrID string) ([]byte, error)
 
 	// Images
-	ImagePull(ctx context.Context, image string) error
+	ImagePull(ctx context.Context, image string, opts ImagePullOpts) error
 	ImagePush(ctx context.Context, image string) error
 	ImageList(ctx context.Context) ([]ImageInfo, error)
 	ImageRemove(ctx context.Context, image string) error
@@ -50,6 +50,21 @@ type Runtime interface {
 	VolumeList(ctx context.Context) ([]VolumeInfo, error)
 	VolumeRemove(ctx context.Context, name string) error
 	VolumeInspect(ctx context.Context, name string) ([]byte, error)
+}
+
+// ImagePullOpts controls image pull behavior. The zero value uses backend defaults.
+type ImagePullOpts struct {
+	// Platform restricts the pull to a single platform, e.g. "linux/arm64".
+	// Empty string uses the backend default (typically host architecture).
+	Platform string
+	// MaxConcurrent caps the number of layers downloaded in parallel.
+	// 0 uses the backend default (Apple container CLI: 3). Only honored by
+	// backends that expose this at the CLI — nerdctl does not.
+	MaxConcurrent int
+	// Progress selects the progress renderer: "ansi", "none", or "" for
+	// auto-detect (ansi when stdout is a TTY, none otherwise). Prevents
+	// ANSI redraw escape codes from cluttering piped/CI output.
+	Progress string
 }
 
 // Compile-time check that Engine implements Runtime.

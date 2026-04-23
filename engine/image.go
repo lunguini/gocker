@@ -4,12 +4,45 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"os"
+	"strconv"
 	"strings"
 	"time"
 )
 
-func (e *Engine) ImagePull(ctx context.Context, image string) error {
-	return e.ExecInteractive(ctx, "image", "pull", image)
+func (e *Engine) ImagePull(ctx context.Context, image string, opts ImagePullOpts) error {
+	return e.ExecInteractive(ctx, buildPullArgs(image, opts, isStdoutTTY())...)
+}
+
+// buildPullArgs constructs the argv for `container image pull`. Exposed for testing.
+func buildPullArgs(image string, opts ImagePullOpts, isTTY bool) []string {
+	args := []string{"image", "pull"}
+	progress := opts.Progress
+	if progress == "" {
+		if isTTY {
+			progress = "ansi"
+		} else {
+			progress = "none"
+		}
+	}
+	args = append(args, "--progress", progress)
+	if opts.MaxConcurrent > 0 {
+		args = append(args, "--max-concurrent-downloads", strconv.Itoa(opts.MaxConcurrent))
+	}
+	if opts.Platform != "" {
+		args = append(args, "--platform", opts.Platform)
+	}
+	args = append(args, image)
+	return args
+}
+
+// isStdoutTTY returns true when os.Stdout is a terminal (character device).
+func isStdoutTTY() bool {
+	fi, err := os.Stdout.Stat()
+	if err != nil {
+		return false
+	}
+	return (fi.Mode() & os.ModeCharDevice) != 0
 }
 
 func (e *Engine) ImagePush(ctx context.Context, image string) error {

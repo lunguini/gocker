@@ -217,7 +217,7 @@ func newDaemonCmd(eng engine.Runtime) *cli.Command {
 								image = "docker.io/adyjay/gocker:base-latest"
 							}
 							fmt.Printf("Pulling %s...\n", image)
-							if err := eng.ImagePull(ctx, image); err != nil {
+							if err := eng.ImagePull(ctx, image, engine.ImagePullOpts{}); err != nil {
 								return fmt.Errorf("pulling base image: %w", err)
 							}
 

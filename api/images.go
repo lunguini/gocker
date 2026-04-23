@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"net/http"
 	"strings"
+
+	"github.com/lunguini/gocker/engine"
 )
 
 func (s *Server) handleImageList(w http.ResponseWriter, r *http.Request) {
@@ -43,7 +45,7 @@ func (s *Server) handleImagePull(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := s.eng.ImagePull(r.Context(), image); err != nil {
+	if err := s.eng.ImagePull(r.Context(), image, engine.ImagePullOpts{}); err != nil {
 		writeError(w, http.StatusInternalServerError, err.Error())
 		return
 	}

@@ -22,7 +22,7 @@ type MockRuntime struct {
 	ContainerExecFunc      func(ctx context.Context, nameOrID string, args []string, interactive bool) error
 	ContainerLogsFunc      func(ctx context.Context, nameOrID string, follow bool) error
 	ContainerInspectFunc   func(ctx context.Context, nameOrID string) ([]byte, error)
-	ImagePullFunc          func(ctx context.Context, image string) error
+	ImagePullFunc          func(ctx context.Context, image string, opts ImagePullOpts) error
 	ImagePushFunc          func(ctx context.Context, image string) error
 	ImageListFunc          func(ctx context.Context) ([]ImageInfo, error)
 	ImageRemoveFunc        func(ctx context.Context, image string) error
@@ -133,11 +133,11 @@ func (m *MockRuntime) ContainerInspect(ctx context.Context, nameOrID string) ([]
 	return m.ContainerInspectFunc(ctx, nameOrID)
 }
 
-func (m *MockRuntime) ImagePull(ctx context.Context, image string) error {
+func (m *MockRuntime) ImagePull(ctx context.Context, image string, opts ImagePullOpts) error {
 	if m.ImagePullFunc == nil {
 		panic("MockRuntime: ImagePull called but ImagePullFunc is nil")
 	}
-	return m.ImagePullFunc(ctx, image)
+	return m.ImagePullFunc(ctx, image, opts)
 }
 
 func (m *MockRuntime) ImagePush(ctx context.Context, image string) error {

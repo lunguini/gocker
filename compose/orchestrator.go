@@ -134,7 +134,7 @@ func (o *Orchestrator) Up(ctx context.Context, opts UpOptions) error {
 		// Pull image if needed
 		if svc.Image != "" {
 			fmt.Printf("  Pulling %s\n", svc.Image)
-			if err := o.eng.ImagePull(ctx, svc.Image); err != nil {
+			if err := o.eng.ImagePull(ctx, svc.Image, engine.ImagePullOpts{}); err != nil {
 				// Image might already exist locally
 				fmt.Fprintf(os.Stderr, "  Warning: pulling %s: %v\n", svc.Image, err)
 			}

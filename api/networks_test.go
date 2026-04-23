@@ -60,7 +60,9 @@ func (s *stubRuntime) ContainerInspect(ctx context.Context, nameOrID string) ([]
 	}
 	return nil, nil
 }
-func (s *stubRuntime) ImagePull(ctx context.Context, image string) error         { return nil }
+func (s *stubRuntime) ImagePull(ctx context.Context, image string, opts engine.ImagePullOpts) error {
+	return nil
+}
 func (s *stubRuntime) ImagePush(ctx context.Context, image string) error         { return nil }
 func (s *stubRuntime) ImageList(ctx context.Context) ([]engine.ImageInfo, error) {
 	if s.imageList != nil {

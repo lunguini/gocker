@@ -315,6 +315,7 @@ make template-push          # Build and push all template images
 - [x] Claude Code session sync across host and sandbox (`/resume` works)
 - [x] GoReleaser + GitHub Actions release workflow
 - [x] Homebrew formula (`brew tap lunguini/tap && brew install gocker`)
+- [ ] Image pull performance — registry mirror config in `~/.gocker/config.yaml`, benchmark Apple CLI vs Docker to identify where time goes (DNS, HTTP, extract, ext4 format), consider layer-cache sharing across full-isolation runs
 - [ ] Network policy enforcement (`--network-policy deny --allow-host api.anthropic.com`)
 - [ ] Codex and Gemini sandbox templates
 
