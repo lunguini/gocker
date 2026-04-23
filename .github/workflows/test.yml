@@ -26,6 +26,29 @@ jobs:
           go-version-file: go.mod
       - uses: golangci/golangci-lint-action@v7
 
+  compat-audit:
+    name: Docker-compat matrix (drift guard)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - name: Build gocker
+        run: make build
+      - name: Regenerate matrix
+        env:
+          GOCKER: ${{ github.workspace }}/gocker
+        run: ./test/compat/audit.sh
+      - name: Fail if matrix drifted
+        run: |
+          if ! git diff --exit-code docs/docker-compatibility-matrix.md; then
+            echo
+            echo "docker-compatibility-matrix.md is out of date."
+            echo "Run 'make compat-audit' locally and commit the result."
+            exit 1
+          fi
+
   integration-macos:
     name: Integration (macOS)
     runs-on: macos-26
