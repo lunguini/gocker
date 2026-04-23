@@ -316,6 +316,7 @@ make template-push          # Build and push all template images
 - [x] GoReleaser + GitHub Actions release workflow
 - [x] Homebrew formula (`brew tap lunguini/tap && brew install gocker`)
 - [ ] Image pull performance — registry mirror config in `~/.gocker/config.yaml`, benchmark Apple CLI vs Docker to identify where time goes (DNS, HTTP, extract, ext4 format), consider layer-cache sharing across full-isolation runs
+- [ ] Live Docker SDK e2e harness — blocked: Apple Container CLI's virtiofs passes socket file inodes but AF_UNIX connections can't flow through to the host's socket server, so we can't exercise gocker's API from a container that bind-mounts `~/.gocker`. Options: expose the daemon on a TCP loopback socket, or run the SDK harness on the host (a Go test rather than a compose scenario). Shape-level SDK compat is already covered by `api/docker_compat_test.go`
 - [ ] Network policy enforcement (`--network-policy deny --allow-host api.anthropic.com`)
 - [ ] Codex and Gemini sandbox templates
 
