@@ -1,5 +1,11 @@
 services:
-  app:
+  server:
     environment:
       SOURCE: override
       ADDED_BY_OVERRIDE: "yes"
+
+  client:
+    image: docker.io/library/alpine:3
+    command: ["/bin/sh", "-c", "sleep infinity"]
+    depends_on:
+      - server
