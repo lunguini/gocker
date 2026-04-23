@@ -41,23 +41,46 @@ func TranslatePath(hostPath string, mounts map[string]string) (string, bool) {
 }
 
 // blockedMountRoots are directories too broad to auto-mount into the VM.
-var blockedMountRoots = map[string]bool{
-	"/":        true,
-	"/tmp":     true,
-	"/var":     true,
-	"/etc":     true,
-	"/private": true,
+// The map is keyed by both the literal path and its symlink-resolved form so
+// that e.g. /etc and /private/etc (macOS) are both rejected.
+var blockedMountRoots = buildBlockedMountRoots([]string{
+	"/",
+	"/tmp",
+	"/var",
+	"/etc",
+	"/private",
+})
+
+func buildBlockedMountRoots(roots []string) map[string]bool {
+	out := make(map[string]bool, len(roots)*2)
+	for _, r := range roots {
+		out[r] = true
+		if resolved, err := filepath.EvalSymlinks(r); err == nil {
+			out[filepath.Clean(resolved)] = true
+		}
+	}
+	return out
 }
 
 // ResolveMountParent determines which directory to mount for a given path.
 // If the path is a directory, it returns that directory.
 // If the path is a file (or doesn't exist), it walks up to find the nearest
 // existing parent directory.
-// Returns an error if the resolved directory is a blocked broad system root.
+// Symlinks in the input are resolved before the blocklist check, so a
+// symlink pointing at a blocked system root is rejected.
+// Returns an error if the resolved directory is a blocked broad system root
+// or if the path is not absolute.
 func ResolveMountParent(path string) (string, error) {
 	path = filepath.Clean(path)
 
-	// Walk up until we find an existing directory
+	// Only absolute paths are meaningful for bind mounts into the VM.
+	// Rejecting relative/empty paths up front removes the ambiguity that
+	// CodeQL flags as tainted path-expression input.
+	if !filepath.IsAbs(path) {
+		return "", fmt.Errorf("mount path must be absolute, got %q", path)
+	}
+
+	// Walk up until we find an existing directory (following symlinks).
 	dir := path
 	for {
 		info, err := os.Stat(dir)
@@ -75,6 +98,14 @@ func ResolveMountParent(path string) (string, error) {
 			break
 		}
 		dir = parent
+	}
+
+	// Resolve symlinks so the blocklist check can't be bypassed by a link
+	// pointing into a blocked root. EvalSymlinks requires the path to exist;
+	// if it fails, fall back to the lexical path (which we already walked up
+	// to an existing directory above).
+	if resolved, err := filepath.EvalSymlinks(dir); err == nil {
+		dir = filepath.Clean(resolved)
 	}
 
 	if blockedMountRoots[dir] {

@@ -1,5 +1,10 @@
 # Changelog
 
+## v0.6.5
+
+- fix: harden ResolveMountParent against symlink-based blocklist bypass and non-absolute input
+- test: add symlink and relative-path regression tests for mount resolution
+
 ## v0.6.4
 
 - fix: inject --project-directory for compose when no -f is given

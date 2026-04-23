@@ -3,6 +3,7 @@ package sharedvm
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -80,14 +81,25 @@ func TestTranslateVolumeSpec_NoColon(t *testing.T) {
 	}
 }
 
+// canonicalPath returns the symlink-resolved form of a path for test comparison.
+// macOS TempDir returns /var/folders/... which resolves to /private/var/folders/...
+func canonicalPath(t *testing.T, p string) string {
+	t.Helper()
+	resolved, err := filepath.EvalSymlinks(p)
+	if err != nil {
+		return p
+	}
+	return resolved
+}
+
 func TestResolveMountParent_Directory(t *testing.T) {
 	dir := t.TempDir()
 	got, err := ResolveMountParent(dir)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if got != dir {
-		t.Errorf("got %q, want %q (directory should mount itself)", got, dir)
+	if want := canonicalPath(t, dir); got != want {
+		t.Errorf("got %q, want %q (directory should mount itself)", got, want)
 	}
 }
 
@@ -101,8 +113,8 @@ func TestResolveMountParent_File(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if got != dir {
-		t.Errorf("got %q, want %q (file should mount parent dir)", got, dir)
+	if want := canonicalPath(t, dir); got != want {
+		t.Errorf("got %q, want %q (file should mount parent dir)", got, want)
 	}
 }
 
@@ -113,8 +125,8 @@ func TestResolveMountParent_NonexistentMountsParent(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if got != dir {
-		t.Errorf("got %q, want %q", got, dir)
+	if want := canonicalPath(t, dir); got != want {
+		t.Errorf("got %q, want %q", got, want)
 	}
 }
 
@@ -159,7 +171,55 @@ func TestResolveMountParent_SubdirOfBlocked(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error for subdir: %v", err)
 	}
-	if got != dir {
-		t.Errorf("got %q, want %q", got, dir)
+	if want := canonicalPath(t, dir); got != want {
+		t.Errorf("got %q, want %q", got, want)
+	}
+}
+
+func TestResolveMountParent_RejectsRelativePath(t *testing.T) {
+	if _, err := ResolveMountParent("relative/path"); err == nil {
+		t.Fatal("expected error for relative path")
+	}
+	if _, err := ResolveMountParent(""); err == nil {
+		t.Fatal("expected error for empty path")
+	}
+}
+
+func TestResolveMountParent_SymlinkToBlockedRootIsRejected(t *testing.T) {
+	// A symlink that points at a blocked system root must be rejected —
+	// otherwise a user could bypass the blocklist by creating a link like
+	// /Users/me/trojan -> /etc and passing that as a bind-mount source.
+	tmp := t.TempDir()
+	link := filepath.Join(tmp, "trojan")
+	if err := os.Symlink("/etc", link); err != nil {
+		t.Skipf("cannot create symlink: %v", err)
+	}
+	_, err := ResolveMountParent(link)
+	if err == nil {
+		t.Fatal("expected error: symlink to /etc should be rejected")
+	}
+	if !strings.Contains(err.Error(), "too broad") {
+		t.Errorf("expected 'too broad' error, got: %v", err)
+	}
+}
+
+func TestResolveMountParent_SymlinkInPathIsResolved(t *testing.T) {
+	// If the input path contains a symlink that resolves to a legitimate
+	// directory, the resolved canonical path is returned.
+	tmp := t.TempDir()
+	real := filepath.Join(tmp, "real")
+	if err := os.Mkdir(real, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	link := filepath.Join(tmp, "link")
+	if err := os.Symlink(real, link); err != nil {
+		t.Skipf("cannot create symlink: %v", err)
+	}
+	got, err := ResolveMountParent(link)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if want := canonicalPath(t, real); got != want {
+		t.Errorf("got %q, want %q", got, want)
 	}
 }
