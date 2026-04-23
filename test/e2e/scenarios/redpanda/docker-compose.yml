@@ -1,0 +1,28 @@
+services:
+  broker:
+    image: docker.io/redpandadata/redpanda:v24.3.1
+    command:
+      - redpanda
+      - start
+      - --overprovisioned
+      - --smp=1
+      - --memory=512M
+      - --reserve-memory=0M
+      - --node-id=0
+      - --check=false
+      - --kafka-addr=PLAINTEXT://0.0.0.0:9092
+      - --advertise-kafka-addr=PLAINTEXT://broker:9092
+      - --rpc-addr=0.0.0.0:33145
+      - --advertise-rpc-addr=broker:33145
+    healthcheck:
+      test: ["CMD", "rpk", "cluster", "info"]
+      interval: 3s
+      timeout: 3s
+      retries: 30
+
+  probe:
+    image: docker.io/redpandadata/redpanda:v24.3.1
+    entrypoint: ["/bin/sh", "-c", "sleep infinity"]
+    depends_on:
+      broker:
+        condition: service_healthy
