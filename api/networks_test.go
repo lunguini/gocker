@@ -14,7 +14,15 @@ import (
 // stubRuntime is a no-op implementation of engine.Runtime used for API tests.
 // Individual tests override specific methods via function fields.
 type stubRuntime struct {
-	networkInspect func(ctx context.Context, name string) ([]byte, error)
+	networkInspect   func(ctx context.Context, name string) ([]byte, error)
+	volumeInspect    func(ctx context.Context, name string) ([]byte, error)
+	containerInspect func(ctx context.Context, nameOrID string) ([]byte, error)
+	containerList    func(ctx context.Context, all bool) ([]engine.ContainerInfo, error)
+	imageList        func(ctx context.Context) ([]engine.ImageInfo, error)
+	networkList      func(ctx context.Context) ([]engine.NetworkInfo, error)
+	volumeList       func(ctx context.Context) ([]engine.VolumeInfo, error)
+	networkCreate    func(ctx context.Context, name string) error
+	volumeCreate     func(ctx context.Context, name string) error
 }
 
 func (s *stubRuntime) Validate() error    { return nil }
@@ -30,6 +38,9 @@ func (s *stubRuntime) ContainerRun(ctx context.Context, args []string, interacti
 	return nil
 }
 func (s *stubRuntime) ContainerList(ctx context.Context, all bool) ([]engine.ContainerInfo, error) {
+	if s.containerList != nil {
+		return s.containerList(ctx, all)
+	}
 	return nil, nil
 }
 func (s *stubRuntime) ContainerStop(ctx context.Context, nameOrID string) error         { return nil }
@@ -44,15 +55,31 @@ func (s *stubRuntime) ContainerLogs(ctx context.Context, nameOrID string, follow
 	return nil
 }
 func (s *stubRuntime) ContainerInspect(ctx context.Context, nameOrID string) ([]byte, error) {
+	if s.containerInspect != nil {
+		return s.containerInspect(ctx, nameOrID)
+	}
 	return nil, nil
 }
 func (s *stubRuntime) ImagePull(ctx context.Context, image string) error         { return nil }
 func (s *stubRuntime) ImagePush(ctx context.Context, image string) error         { return nil }
-func (s *stubRuntime) ImageList(ctx context.Context) ([]engine.ImageInfo, error) { return nil, nil }
+func (s *stubRuntime) ImageList(ctx context.Context) ([]engine.ImageInfo, error) {
+	if s.imageList != nil {
+		return s.imageList(ctx)
+	}
+	return nil, nil
+}
 func (s *stubRuntime) ImageRemove(ctx context.Context, image string) error       { return nil }
 func (s *stubRuntime) ImageBuild(ctx context.Context, args []string) error       { return nil }
-func (s *stubRuntime) NetworkCreate(ctx context.Context, name string) error      { return nil }
+func (s *stubRuntime) NetworkCreate(ctx context.Context, name string) error {
+	if s.networkCreate != nil {
+		return s.networkCreate(ctx, name)
+	}
+	return nil
+}
 func (s *stubRuntime) NetworkList(ctx context.Context) ([]engine.NetworkInfo, error) {
+	if s.networkList != nil {
+		return s.networkList(ctx)
+	}
 	return nil, nil
 }
 func (s *stubRuntime) NetworkRemove(ctx context.Context, name string) error { return nil }
@@ -68,12 +95,25 @@ func (s *stubRuntime) NetworkInspect(ctx context.Context, name string) ([]byte, 
 	}
 	return nil, nil
 }
-func (s *stubRuntime) VolumeCreate(ctx context.Context, name string) error { return nil }
+func (s *stubRuntime) VolumeCreate(ctx context.Context, name string) error {
+	if s.volumeCreate != nil {
+		return s.volumeCreate(ctx, name)
+	}
+	return nil
+}
 func (s *stubRuntime) VolumeList(ctx context.Context) ([]engine.VolumeInfo, error) {
+	if s.volumeList != nil {
+		return s.volumeList(ctx)
+	}
 	return nil, nil
 }
-func (s *stubRuntime) VolumeRemove(ctx context.Context, name string) error            { return nil }
-func (s *stubRuntime) VolumeInspect(ctx context.Context, name string) ([]byte, error) { return nil, nil }
+func (s *stubRuntime) VolumeRemove(ctx context.Context, name string) error { return nil }
+func (s *stubRuntime) VolumeInspect(ctx context.Context, name string) ([]byte, error) {
+	if s.volumeInspect != nil {
+		return s.volumeInspect(ctx, name)
+	}
+	return nil, nil
+}
 
 // TestNetworkInspectAppleCLIArrayResponse verifies that when the Apple
 // container CLI returns its inspect payload as a JSON array with lowercase

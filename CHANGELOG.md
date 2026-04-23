@@ -1,5 +1,11 @@
 # Changelog
 
+## v0.6.3
+
+- fix: reshape volume inspect API response for Docker SDK compatibility
+- test: add Docker SDK compatibility tests for all JSON-returning API endpoints
+- docs: note compose network label ownership and SDK compat test harness
+
 ## v0.6.2
 
 - docs: update CHANGELOG.md for v0.6.2 and note commit convention
