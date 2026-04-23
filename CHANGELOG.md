@@ -1,5 +1,27 @@
 # Changelog
 
+## v0.8.0
+
+User-facing:
+
+- feat(image): new `gocker image` subcommand group (`ls`, `rm`) mirroring Docker's nested style; both `gocker rmi <name>` and `gocker image rm <name>` now resolve name-only refs to every matching tag, accept short image IDs (6+ hex chars), and reject ambiguous ID prefixes
+- feat(pull): `gocker pull` now accepts `--platform`, `--max-concurrent-downloads`/`-j`, and `--progress`; auto-detects TTY so pipe/CI output stops getting cluttered with ANSI escapes
+- feat(api): Docker CLI `docker run -d` works through a `docker context` pointing at gocker — `NetworkMode: "default"` no longer leaks through as `--network default` to the backend
+- feat(api): new `GET /system/df` endpoint (used by `docker system df` and dashboards like lazydocker)
+- fix(cli): `gocker images rm <name>` and other leaf commands now reject unexpected positional args with a clear error instead of silently running the default action
+
+Testing & tooling:
+
+- test(e2e): new `make e2e` suite with 9 scenarios covering redis/postgres/redpanda, multi-file compose with cross-file service DNS, 3-file data-flow stack, env substitution, local builds, and real-world canaries (wordpress+mariadb, immich)
+- test(cli): walk-the-command-tree test that refuses silent positional-arg swallowing on every leaf command
+- test(compat): `make compat-audit` generates a markdown matrix diffing `docker <cmd> --help` vs `gocker <cmd> --help`; CI job fails if the matrix drifts
+- test(api): expand the SDK-shape harness to cover `types.DiskUsage` and `events.Message` decode
+
+Docs:
+
+- docs: document the setup wizard flow and `--yes` in README
+- docs: track `/containers/{id}/attach`, `/containers/{id}/wait`, image-pull perf, and live SDK harness as open follow-ups in README roadmap
+
 ## v0.7.0
 
 - feat(setup): interactive setup wizard with isolation-mode selector and host-aware resource defaults
