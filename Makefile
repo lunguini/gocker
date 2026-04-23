@@ -3,7 +3,7 @@ VERSION := $(shell git describe --tags --always --dirty 2>/dev/null || echo "0.2
 LDFLAGS := -ldflags "-X main.version=$(VERSION)"
 DOCKER_REPO := docker.io/adyjay/gocker
 
-.PHONY: build build-linux install test test-integration test-all lint clean smoke benchmark \
+.PHONY: build build-linux install test test-integration test-all lint clean smoke benchmark e2e \
 	template-build-claude template-push-claude \
 	template-build-base template-push-base \
 	template-build template-push
@@ -67,6 +67,9 @@ template-push: template-push-claude template-push-base
 
 smoke: install
 	@bash test/smoke.sh
+
+e2e:  ## Run end-to-end compose scenarios (requires running shared VM)
+	@./test/e2e/run-all.sh
 
 benchmark: install
 	@bash test/benchmark.sh
