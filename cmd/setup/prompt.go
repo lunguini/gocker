@@ -11,6 +11,10 @@ import (
 	"golang.org/x/term"
 )
 
+// stdinReader is a package-level shared reader so chained prompts don't lose
+// buffered bytes to per-call bufio.Readers (important for scripted stdin).
+var stdinReader = bufio.NewReader(os.Stdin)
+
 // IsInteractive returns true if stdin is a terminal.
 func IsInteractive() bool {
 	return term.IsTerminal(int(os.Stdin.Fd()))
@@ -23,7 +27,7 @@ func Confirm(prompt string, def bool) bool {
 		suffix = " [Y/n]: "
 	}
 	fmt.Print(prompt + suffix)
-	return parseConfirm(os.Stdin, def)
+	return parseConfirm(stdinReader, def)
 }
 
 func parseConfirm(r io.Reader, def bool) bool {
@@ -52,7 +56,7 @@ func Choose(prompt string, options []string, def string) string {
 		fmt.Printf("%s%d) %s\n", marker, i+1, o)
 	}
 	fmt.Printf("Select [default: %s]: ", def)
-	return parseChoice(os.Stdin, options, def)
+	return parseChoice(stdinReader, options, def)
 }
 
 func parseChoice(r io.Reader, options []string, def string) string {
@@ -75,7 +79,7 @@ func parseChoice(r io.Reader, options []string, def string) string {
 // Input prompts for a free-text string, returning def if empty.
 func Input(prompt, def string) string {
 	fmt.Printf("%s [default: %s]: ", prompt, def)
-	line, _ := bufio.NewReader(os.Stdin).ReadString('\n')
+	line, _ := stdinReader.ReadString('\n')
 	s := strings.TrimSpace(line)
 	if s == "" {
 		return def
