@@ -1,5 +1,10 @@
 # Changelog
 
+## v0.7.7
+
+- fix(prune): treat Apple's 'referring containers' errors as soft skips
+- docs: update CHANGELOG.md for v0.7.6
+
 ## v0.7.6
 
 - fix(compose): pass Labels through volume/network list + inspect
