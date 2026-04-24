@@ -72,6 +72,20 @@ func newVolumeCmd(eng engine.Runtime) *cli.Command {
 				},
 			},
 			{
+				Name:  "prune",
+				Usage: "Remove all unused volumes",
+				Flags: []cli.Flag{
+					&cli.BoolFlag{Name: "force", Aliases: []string{"f"}, Usage: "Do not prompt for confirmation"},
+				},
+				Action: func(ctx context.Context, cmd *cli.Command) error {
+					if cmd.Args().Len() > 0 {
+						return cli.Exit("unexpected arguments: "+strings.Join(cmd.Args().Slice(), " "), 2)
+					}
+					printPruneReport("volumes", pruneUnusedVolumes(ctx, eng))
+					return nil
+				},
+			},
+			{
 				Name:      "inspect",
 				Usage:     "Display detailed volume information",
 				ArgsUsage: "VOLUME",

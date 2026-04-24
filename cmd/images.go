@@ -58,6 +58,25 @@ func newImageCmd(eng engine.Runtime) *cli.Command {
 					return removeImages(ctx, eng, cmd.Args().Slice())
 				},
 			},
+			{
+				Name:  "prune",
+				Usage: "Remove unused images (dangling by default; use -a for all)",
+				Flags: []cli.Flag{
+					&cli.BoolFlag{
+						Name:    "all",
+						Aliases: []string{"a"},
+						Usage:   "Remove all unused images, not just dangling ones",
+					},
+					&cli.BoolFlag{Name: "force", Aliases: []string{"f"}, Usage: "Do not prompt for confirmation"},
+				},
+				Action: func(ctx context.Context, cmd *cli.Command) error {
+					if cmd.Args().Len() > 0 {
+						return cli.Exit(fmt.Sprintf("unexpected arguments: %v", cmd.Args().Slice()), 2)
+					}
+					printPruneReport("images", pruneImages(ctx, eng, cmd.Bool("all")))
+					return nil
+				},
+			},
 		},
 	}
 }
