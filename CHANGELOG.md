@@ -1,5 +1,11 @@
 # Changelog
 
+## v0.7.6
+
+- fix(compose): pass Labels through volume/network list + inspect
+- docs: track roadmap as GitHub issues (label: roadmap) instead of README bullets
+- docs: update CHANGELOG.md for v0.7.5
+
 ## v0.7.5
 
 - fix: CI-stable exec hijack test + gate release on tests
