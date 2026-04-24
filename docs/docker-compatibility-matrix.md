@@ -87,19 +87,19 @@ Legend: ✅ present, ❌ missing, ➖ ignored (see `test/compat/ignored.txt`)
 | command | docker flags gocker lacks |
 |---|---|
 | `ai` | `--send-files` `--send-project-structure` `--write-files` `-C` `-s` |
-| `build` | `--add-host` `--allow` `--annotation` `--attest` `--build-arg` `--build-context` `--builder` `--cache-from` `--cache-to` `--call` `--cgroup-parent` `--check` `--iidfile` `--label` `--load` `--metadata-file` `--network` `--no-cache` `--no-cache-filter` `--platform` `--policy` `--progress` `--provenance` `--pull` `--push` `--sbom` `--secret` `--shm-size` `--ssh` `--target` `--ulimit` `-D` `-o` `-q` `-t` |
+| `build` | `--add-host` `--allow` `--annotation` `--attest` `--build-arg` `--build-context` `--builder` `--cache-from` `--cache-to` `--call` `--cgroup-parent` `--check` `--iidfile` `--label` `--load` `--metadata-file` `--network` `--no-cache` `--no-cache-filter` `--platform` `--policy` `--progress` `--provenance` `--pull` `--push` `--sbom` `--secret` `--shm-size` `--ssh` `--target` `--ulimit` `-D` `-o` `-q` |
 | `compose` | `--all-resources` `--ansi` `--compatibility` `--dry-run` `--env-file` `--parallel` `--profile` `--progress` `--project-directory` `-f` `-p` |
 | `exec` | `--detach-keys` `--env-file` `--privileged` `-d` `-e` `-i` `-t` `-u` `-w` |
 | `images` | `--digests` `--format` `--no-trunc` `-a` `-f` `-q` |
 | `info` | `-f` |
 | `inspect` | `--type` `-f` `-s` |
 | `logs` | `--details` `--since` `--until` `-n` `-t` |
-| `ps` | `--format` `--no-trunc` `-f` `-l` `-n` `-s` |
-| `pull` | `--platform` `-a` `-q` |
+| `ps` | `--format` `--no-trunc` `-a` `-f` `-l` `-n` `-q` `-s` |
+| `pull` | `-a` `-q` |
 | `push` | `-a` `-q` |
 | `rm` | `-l` `-v` |
 | `rmi` | `--no-prune` `-f` |
-| `run` | `--add-host` `--blkio-weight` `--blkio-weight-device` `--cap-add` `--cap-drop` `--cgroup-parent` `--cgroupns` `--cidfile` `--cpu-count` `--cpu-percent` `--cpu-period` `--cpu-quota` `--cpu-rt-period` `--cpu-rt-runtime` `--cpus` `--cpuset-cpus` `--cpuset-mems` `--detach-keys` `--device` `--device-cgroup-rule` `--device-read-bps` `--device-read-iops` `--device-write-bps` `--device-write-iops` `--dns` `--dns-option` `--dns-search` `--domainname` `--entrypoint` `--env-file` `--expose` `--gpus` `--group-add` `--health-cmd` `--health-interval` `--health-retries` `--health-start-period` `--health-timeout` `--init` `--io-maxbandwidth` `--io-maxiops` `--ip` `--ip6` `--ipc` `--isolation` `--label-file` `--link` `--link-local-ip` `--log-driver` `--log-opt` `--mac-address` `--memory-reservation` `--memory-swap` `--memory-swappiness` `--mount` `--name` `--network` `--network-alias` `--no-healthcheck` `--oom-kill-disable` `--oom-score-adj` `--pid` `--pids-limit` `--platform` `--privileged` `--pull` `--read-only` `--restart` `--rm` `--runtime` `--security-opt` `--shm-size` `--sig-proxy` `--stop-signal` `--stop-timeout` `--storage-opt` `--sysctl` `--tmpfs` `--ulimit` `--use-api-socket` `--userns` `--uts` `--volume-driver` `--volumes-from` `-P` `-a` `-c` `-d` `-e` `-h` `-i` `-l` `-m` `-p` `-q` `-t` `-u` `-v` `-w` |
+| `run` | `--add-host` `--blkio-weight` `--blkio-weight-device` `--cap-add` `--cap-drop` `--cgroup-parent` `--cgroupns` `--cidfile` `--cpu-count` `--cpu-percent` `--cpu-period` `--cpu-quota` `--cpu-rt-period` `--cpu-rt-runtime` `--cpus` `--cpuset-cpus` `--cpuset-mems` `--detach-keys` `--device` `--device-cgroup-rule` `--device-read-bps` `--device-read-iops` `--device-write-bps` `--device-write-iops` `--dns` `--dns-option` `--dns-search` `--domainname` `--entrypoint` `--env-file` `--expose` `--gpus` `--group-add` `--health-cmd` `--health-interval` `--health-retries` `--health-start-period` `--health-timeout` `--init` `--io-maxbandwidth` `--io-maxiops` `--ip` `--ip6` `--ipc` `--isolation` `--label-file` `--link` `--link-local-ip` `--log-driver` `--log-opt` `--mac-address` `--memory-reservation` `--memory-swap` `--memory-swappiness` `--mount` `--name` `--network` `--network-alias` `--no-healthcheck` `--oom-kill-disable` `--oom-score-adj` `--pid` `--pids-limit` `--platform` `--privileged` `--pull` `--read-only` `--restart` `--rm` `--runtime` `--security-opt` `--shm-size` `--sig-proxy` `--stop-signal` `--stop-timeout` `--storage-opt` `--sysctl` `--tmpfs` `--ulimit` `--use-api-socket` `--userns` `--uts` `--volume-driver` `--volumes-from` `-P` `-a` `-c` `-d` `-e` `-h` `-i` `-l` `-p` `-q` `-t` `-u` `-v` `-w` |
 | `sandbox` | `-D` |
 | `start` | `--detach-keys` `-a` `-i` |
 | `stop` | `-s` `-t` |
