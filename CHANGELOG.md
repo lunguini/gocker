@@ -1,5 +1,10 @@
 # Changelog
 
+## v0.7.3
+
+- fix(prune): populate network name/id fallback, widen in-use error filter
+- docs: update CHANGELOG.md for v0.7.2
+
 ## v0.7.2
 
 - docs(compat): refresh matrix — gocker gained build -t, ps -a/-q, pull --platform
