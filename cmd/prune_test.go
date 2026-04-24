@@ -10,13 +10,17 @@ import (
 
 func TestIsInUseError(t *testing.T) {
 	cases := map[string]bool{
-		"":                                      false,
-		"some unrelated failure":                false,
-		"network X has active endpoints":        true,
-		"Error: image is in use by container":   true,
-		"volume is being used by a container":   true,
-		"image has dependent child images":      true,
-		"ERROR: ... IN USE ...":                 true, // case-insensitive
+		"":                                         false,
+		"some unrelated failure":                   false,
+		"network X has active endpoints":           true,
+		"Error: image is in use by container":      true,
+		"volume is being used by a container":      true,
+		"image has dependent child images":         true,
+		"ERROR: ... IN USE ...":                    true, // case-insensitive
+		// Apple Container CLI's opaque prune-time wrapper — we accept it as
+		// a soft skip because the backend was right to refuse, but the
+		// message doesn't tell us why.
+		`Error: failed to delete one or more networks: ["foo"]: exit status 1`: true,
 	}
 	for msg, want := range cases {
 		var err error

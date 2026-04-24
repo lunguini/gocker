@@ -272,6 +272,27 @@ func TestParseNetworkListJSON(t *testing.T) {
 			t.Errorf("Name = %q, want %q", n.Name, "my-custom-net")
 		}
 	})
+
+	// Apple Container CLI's real output has no "name" field — it uses "id"
+	// as the human-readable identifier. The parser must fall back to id so
+	// downstream callers (network prune, network rm by name, etc.) have
+	// something to address the network by.
+	t.Run("apple container CLI shape falls back name->id", func(t *testing.T) {
+		appleData := []byte(`[{"id":"project__abc123_default","state":"running"}]`)
+		nets, err := parseNetworkListJSON(appleData)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if len(nets) != 1 {
+			t.Fatalf("expected 1 network, got %d", len(nets))
+		}
+		if nets[0].Name != "project__abc123_default" {
+			t.Errorf("Name: got %q, want apple id fallback", nets[0].Name)
+		}
+		if nets[0].ID != "project__abc123_default" {
+			t.Errorf("ID: got %q, want the raw id", nets[0].ID)
+		}
+	})
 }
 
 func TestParseVolumeListJSON(t *testing.T) {

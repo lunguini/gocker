@@ -20,20 +20,30 @@ type pruneReport struct {
 // isInUseError heuristically detects the "resource is currently in use"
 // errors returned by Apple Container CLI and nerdctl. These are not real
 // prune failures — they mean "this thing is used, skip it."
+//
+// Apple's `container network delete` wraps the underlying failure in an
+// opaque `failed to delete one or more networks: ["<name>"]` message that
+// doesn't tell us *why*, so we include it as a soft-skip pattern too.
+// Prune is best-effort by design: better to undercount errors than spam
+// the user with warnings for networks the backend was right to refuse.
 func isInUseError(err error) bool {
 	if err == nil {
 		return false
 	}
 	msg := strings.ToLower(err.Error())
-	switch {
-	case strings.Contains(msg, "in use"):
-	case strings.Contains(msg, "has active endpoints"):
-	case strings.Contains(msg, "is being used"):
-	case strings.Contains(msg, "has dependent child"):
-	default:
-		return false
+	patterns := []string{
+		"in use",
+		"has active endpoints",
+		"is being used",
+		"has dependent child",
+		"failed to delete one or more", // Apple CLI generic wrapper
 	}
-	return true
+	for _, p := range patterns {
+		if strings.Contains(msg, p) {
+			return true
+		}
+	}
+	return false
 }
 
 // pruneStoppedContainers removes every container in a non-running terminal
@@ -82,17 +92,27 @@ func pruneUnusedNetworks(ctx context.Context, eng engine.Runtime) pruneReport {
 		return r
 	}
 	for _, n := range ns {
-		if _, isDefault := defaultNetworkNames[n.Name]; isDefault {
+		// Skip entries the parser couldn't name — trying to remove "" gives
+		// an Apple CLI error with no useful context, and there's nothing
+		// the user can do about it anyway.
+		ref := n.Name
+		if ref == "" {
+			ref = n.ID
+		}
+		if ref == "" {
 			continue
 		}
-		if err := eng.NetworkRemove(ctx, n.Name); err != nil {
+		if _, isDefault := defaultNetworkNames[ref]; isDefault {
+			continue
+		}
+		if err := eng.NetworkRemove(ctx, ref); err != nil {
 			if isInUseError(err) {
 				continue
 			}
-			r.errors = append(r.errors, fmt.Sprintf("remove network %s: %v", n.Name, err))
+			r.errors = append(r.errors, fmt.Sprintf("remove network %s: %v", ref, err))
 			continue
 		}
-		r.removed = append(r.removed, n.Name)
+		r.removed = append(r.removed, ref)
 	}
 	return r
 }
@@ -108,6 +128,9 @@ func pruneUnusedVolumes(ctx context.Context, eng engine.Runtime) pruneReport {
 		return r
 	}
 	for _, v := range vs {
+		if v.Name == "" {
+			continue
+		}
 		if err := eng.VolumeRemove(ctx, v.Name); err != nil {
 			if isInUseError(err) {
 				continue

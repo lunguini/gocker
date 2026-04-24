@@ -47,9 +47,18 @@ func parseNetworkListJSON(data []byte) ([]NetworkInfo, error) {
 
 	var result []NetworkInfo
 	for _, n := range networks {
+		// Apple Container CLI uses "id" as the human-readable identifier
+		// and doesn't expose a separate "name" field — id IS the name.
+		// Fall back to id when name is absent so callers have something
+		// to address the network by.
+		name := getString(n, "name", "Name")
+		id := getString(n, "id", "ID", "Id")
+		if name == "" {
+			name = id
+		}
 		result = append(result, NetworkInfo{
-			ID:     getString(n, "id", "ID", "Id"),
-			Name:   getString(n, "name", "Name"),
+			ID:     id,
+			Name:   name,
 			Driver: getString(n, "driver", "Driver"),
 			Scope:  getString(n, "scope", "Scope"),
 		})

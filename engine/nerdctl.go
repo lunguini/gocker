@@ -300,9 +300,20 @@ func ParseNerdctlNetworkList(data []byte) ([]NetworkInfo, error) {
 
 	var result []NetworkInfo
 	for _, obj := range objects {
+		// Same name-id fallback as the Apple parser: some backends populate
+		// only one of the two. Never return an empty identifier — callers
+		// will try to pass "" to network rm/prune and get opaque errors.
+		name := getString(obj, "Name", "name")
+		id := getString(obj, "ID", "id")
+		if name == "" {
+			name = id
+		}
+		if id == "" {
+			id = name
+		}
 		result = append(result, NetworkInfo{
-			ID:     getString(obj, "ID", "id"),
-			Name:   getString(obj, "Name", "name"),
+			ID:     id,
+			Name:   name,
 			Driver: getString(obj, "Driver", "driver"),
 			Scope:  getString(obj, "Scope", "scope"),
 		})
