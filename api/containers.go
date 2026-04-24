@@ -1,12 +1,15 @@
 package api
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
+	"strings"
 	"sync"
 	"sync/atomic"
+	"time"
 )
 
 var (
@@ -156,56 +159,52 @@ func (s *Server) handleContainerInspect(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	// Parse and re-wrap in Docker-compatible format.
-	// Apple CLI may return a JSON array — unwrap the first element.
-	var raw map[string]any
-	if err := json.Unmarshal(data, &raw); err != nil {
+	// nerdctl inspect output is already Docker-shaped (Config.Env,
+	// Config.Labels, HostConfig.*, Mounts, NetworkSettings, State, etc.).
+	// Apple container CLI's inspect is also close enough that tools accept
+	// it. Pass the raw JSON through with minimal massaging rather than
+	// rebuilding a tiny subset — previously we hardcoded Env: [] and most
+	// Config fields to empty, which broke lazydocker, testcontainers, and
+	// anything else that reads real container metadata.
+	//
+	// Apple CLI returns a JSON array; nerdctl returns either a single
+	// object or an array. Unwrap the first element of an array, but
+	// preserve the full object shape.
+	var obj map[string]any
+	if err := json.Unmarshal(data, &obj); err != nil {
 		var arr []map[string]any
 		if arrErr := json.Unmarshal(data, &arr); arrErr == nil {
 			if len(arr) == 0 {
 				writeError(w, http.StatusNotFound, "No such container: "+id)
 				return
 			}
-			raw = arr[0]
+			obj = arr[0]
 		} else {
 			writeError(w, http.StatusInternalServerError, "failed to parse inspect data")
 			return
 		}
 	}
 
-	// Build a Docker-compatible inspect response
-	state := getString(raw, "state", "State", "status", "Status")
-	running := state == "running"
-	resp := map[string]any{
-		"Id":    id,
-		"Name":  "/" + getString(raw, "name", "Name"),
-		"Image": getString(raw, "image", "Image"),
-		"State": ContainerState{
-			Status:  state,
-			Running: running,
-		},
-		"Config": map[string]any{
-			"Image": getString(raw, "image", "Image"),
-			"Env":   []string{},
-		},
-		"HostConfig": map[string]any{
-			"Binds":       []string{},
-			"NetworkMode": "bridge",
-		},
-		"NetworkSettings": map[string]any{
-			"Networks": map[string]any{
-				"bridge": map[string]string{
-					"IPAddress": getString(raw, "ip", "IP", "ipAddress", "IPAddress"),
-				},
-			},
-		},
+	// Normalize the Name field to Docker's leading-slash convention. nerdctl
+	// already emits "/my-container"; Apple CLI emits "my-container". A
+	// leading slash is required by docker clients that do path-style lookups.
+	if name, ok := obj["Name"].(string); ok && name != "" && !strings.HasPrefix(name, "/") {
+		obj["Name"] = "/" + name
 	}
-	writeJSON(w, http.StatusOK, resp)
+
+	writeJSON(w, http.StatusOK, obj)
 }
 
 func (s *Server) handleContainerLogs(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
-	follow := r.URL.Query().Get("follow") == "1" || r.URL.Query().Get("follow") == "true"
+	q := r.URL.Query()
+	follow := q.Get("follow") == "1" || q.Get("follow") == "true"
+
+	// Docker clients (including lazydocker) expect logs to be multiplexed
+	// with the same 8-byte frame header as /exec/{id}/start when the
+	// container has no TTY. The client decodes frames and crashes or shows
+	// garbage on raw-byte input. Emit framed output by default.
+	w.Header().Set("Content-Type", "application/vnd.docker.raw-stream")
 
 	if follow {
 		stream, err := s.eng.ExecStream(r.Context(), "logs", id, "--follow")
@@ -214,20 +213,8 @@ func (s *Server) handleContainerLogs(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		defer func() { _ = stream.Close() }()
-		w.Header().Set("Content-Type", "application/octet-stream")
-		buf := make([]byte, 4096)
-		for {
-			n, readErr := stream.Read(buf)
-			if n > 0 {
-				_, _ = w.Write(buf[:n])
-				if f, ok := w.(http.Flusher); ok {
-					f.Flush()
-				}
-			}
-			if readErr != nil {
-				return
-			}
-		}
+		writeFramedChunks(w, stream)
+		return
 	}
 
 	stdout, _, err := s.eng.Exec(r.Context(), "logs", id)
@@ -235,8 +222,8 @@ func (s *Server) handleContainerLogs(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
-	w.Header().Set("Content-Type", "application/octet-stream")
-	_, _ = w.Write(stdout)
+	// Single-shot response: wrap the whole payload in one frame.
+	writeFramedChunks(w, bytes.NewReader(stdout))
 }
 
 func (s *Server) handleExecCreate(w http.ResponseWriter, r *http.Request) {
@@ -354,6 +341,100 @@ func exitCodeFromError(err error) int {
 	return 1
 }
 
+// handleContainerStats implements GET /containers/{id}/stats. Docker's
+// shape is types.StatsJSON; clients like lazydocker poll this for per-
+// second CPU/mem/net/IO counters. We don't have a real source for these
+// in Apple Container CLI today, so return a well-formed zero-value stream
+// (or single snapshot when stream=0) — that keeps lazydocker's stats
+// panel alive instead of showing "endpoint not found".
+//
+// TODO: populate real counters by probing /sys/fs/cgroup inside the VM or
+// shelling out to `nerdctl stats` (issue #TBD for proper implementation).
+func (s *Server) handleContainerStats(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+	stream := r.URL.Query().Get("stream") != "0" && r.URL.Query().Get("stream") != "false"
+
+	// Verify the container exists so we don't pretend to stream stats for
+	// something imaginary — clients treat 404 here as a clean signal.
+	if _, err := s.eng.ContainerInspect(r.Context(), id); err != nil {
+		writeError(w, http.StatusNotFound, err.Error())
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	flusher, _ := w.(http.Flusher)
+
+	writeSnapshot := func() bool {
+		snap := zeroStatsJSON(id)
+		data, _ := json.Marshal(snap)
+		data = append(data, '\n')
+		if _, err := w.Write(data); err != nil {
+			return false
+		}
+		if flusher != nil {
+			flusher.Flush()
+		}
+		return true
+	}
+
+	if !writeSnapshot() {
+		return
+	}
+	if !stream {
+		return
+	}
+	ticker := time.NewTicker(time.Second)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-r.Context().Done():
+			return
+		case <-ticker.C:
+			if !writeSnapshot() {
+				return
+			}
+		}
+	}
+}
+
+// zeroStatsJSON returns a StatsJSON-shaped zero-value snapshot with the
+// current timestamps. Enough for clients to render "0% CPU, 0B memory"
+// without erroring on missing fields.
+func zeroStatsJSON(id string) map[string]any {
+	now := time.Now()
+	zero := func() map[string]any { return map[string]any{} }
+	cpu := map[string]any{
+		"cpu_usage": map[string]any{
+			"total_usage":         0,
+			"percpu_usage":        []int{0},
+			"usage_in_kernelmode": 0,
+			"usage_in_usermode":   0,
+		},
+		"system_cpu_usage": 0,
+		"online_cpus":      1,
+		"throttling_data": map[string]any{
+			"periods":           0,
+			"throttled_periods": 0,
+			"throttled_time":    0,
+		},
+	}
+	return map[string]any{
+		"id":            id,
+		"name":          "/" + id,
+		"read":          now.UTC().Format(time.RFC3339Nano),
+		"preread":       now.Add(-time.Second).UTC().Format(time.RFC3339Nano),
+		"num_procs":     0,
+		"cpu_stats":     cpu,
+		"precpu_stats":  cpu,
+		"memory_stats":  map[string]any{"usage": 0, "limit": 0, "max_usage": 0, "stats": zero()},
+		"pids_stats":    map[string]any{"current": 0},
+		"networks":      zero(),
+		"blkio_stats":   zero(),
+		"storage_stats": zero(),
+	}
+}
+
 // handleExecInspect implements GET /exec/{id}/json. Docker CLI calls it
 // after the stream finishes to report the command's exit code. The shape
 // mirrors docker's types.ContainerExecInspect.
@@ -382,7 +463,11 @@ func (s *Server) handleExecInspect(w http.ResponseWriter, r *http.Request) {
 // writeFramedChunks reads from src in 4KB chunks and writes Docker's 8-byte
 // multiplex frame header followed by the payload. All output is tagged as
 // stdout (stream type 1) because our ExecStream doesn't split stderr today.
+// If dst implements http.Flusher, flushes after every frame — essential
+// for streaming endpoints like `docker logs --follow` where clients expect
+// output as it arrives.
 func writeFramedChunks(dst io.Writer, src io.Reader) {
+	flusher, _ := dst.(http.Flusher)
 	buf := make([]byte, 4096)
 	header := make([]byte, 8)
 	for {
@@ -401,6 +486,9 @@ func writeFramedChunks(dst io.Writer, src io.Reader) {
 			}
 			if _, werr := dst.Write(buf[:n]); werr != nil {
 				return
+			}
+			if flusher != nil {
+				flusher.Flush()
 			}
 		}
 		if err != nil {

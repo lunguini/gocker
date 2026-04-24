@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"io"
 	"net"
 	"net/http"
@@ -88,10 +89,30 @@ func TestDockerCompat_VolumeInspect_ArrayPayload(t *testing.T) {
 	}
 }
 
-func TestDockerCompat_ContainerInspect_ArrayPayload(t *testing.T) {
+func TestDockerCompat_ContainerInspect_PassesRealFieldsThrough(t *testing.T) {
+	// nerdctl inspect emits a Docker-shaped object with State nested, full
+	// Config (Env/Labels/Hostname/Image), HostConfig, Mounts, and
+	// NetworkSettings. The handler should pass all of that through instead
+	// of rebuilding a tiny subset — that's what was breaking lazydocker's
+	// "env/config/mounts" views.
+	payload := `[{
+		"Id": "ctr-xyz",
+		"Name": "redis",
+		"Image": "redis:7",
+		"State": {"Status": "running", "Running": true, "Pid": 42},
+		"Config": {
+			"Image": "redis:7",
+			"Env": ["FOO=bar", "REDIS_PORT=6379"],
+			"Labels": {"com.example.app": "cache"},
+			"Hostname": "abc123",
+			"Cmd": ["redis-server"]
+		},
+		"HostConfig": {"NetworkMode": "bridge"},
+		"NetworkSettings": {"IPAddress": "10.4.0.5", "Ports": {}}
+	}]`
 	srv := NewServer(&stubRuntime{
 		containerInspect: func(ctx context.Context, id string) ([]byte, error) {
-			return []byte(`[{"id":"ctr-xyz","name":"redis","image":"redis:7","status":"running"}]`), nil
+			return []byte(payload), nil
 		},
 	}, "")
 
@@ -106,8 +127,26 @@ func TestDockerCompat_ContainerInspect_ArrayPayload(t *testing.T) {
 	if out.ID != "ctr-xyz" {
 		t.Errorf("ID: got %q, want %q", out.ID, "ctr-xyz")
 	}
+	if out.Name != "/redis" {
+		t.Errorf("Name: got %q, want leading-slash %q", out.Name, "/redis")
+	}
 	if out.State == nil || out.State.Status != "running" {
 		t.Errorf("State.Status: got %+v, want running", out.State)
+	}
+	if out.Config == nil {
+		t.Fatal("Config is nil — env/labels/cmd all lost")
+	}
+	if len(out.Config.Env) != 2 || out.Config.Env[0] != "FOO=bar" {
+		t.Errorf("Config.Env: got %v, want [FOO=bar REDIS_PORT=6379]", out.Config.Env)
+	}
+	if out.Config.Labels["com.example.app"] != "cache" {
+		t.Errorf("Config.Labels: got %v", out.Config.Labels)
+	}
+	if len(out.Config.Cmd) == 0 || out.Config.Cmd[0] != "redis-server" {
+		t.Errorf("Config.Cmd: got %v", out.Config.Cmd)
+	}
+	if out.Config.Hostname != "abc123" {
+		t.Errorf("Config.Hostname: got %q", out.Config.Hostname)
 	}
 }
 
@@ -648,6 +687,66 @@ func TestDockerCompat_VolumeInspect_PassesLabelsThrough(t *testing.T) {
 	}
 	if out.Labels["com.docker.compose.volume"] != "data" {
 		t.Errorf("compose volume label lost: got Labels=%v", out.Labels)
+	}
+}
+
+func TestDockerCompat_Stats_ReturnsValidStatsJSON(t *testing.T) {
+	// lazydocker polls /containers/{id}/stats?stream=1 for CPU/mem. A 404
+	// or malformed response makes the stats panel dead. We stub zero
+	// values but must emit a shape that decodes into types.StatsJSON.
+	srv := NewServer(&stubRuntime{
+		containerInspect: func(ctx context.Context, id string) ([]byte, error) {
+			// Any non-error response is enough to pass the existence check.
+			return []byte(`[{"Id":"ctr-stats"}]`), nil
+		},
+	}, "")
+
+	rr := doGET(t, srv, "/containers/ctr-stats/stats?stream=0")
+	if rr.Code != http.StatusOK {
+		t.Fatalf("status: got %d, want 200; body=%s", rr.Code, rr.Body.String())
+	}
+	// Body is newline-terminated JSON; strip the trailing newline for decode.
+	body := bytes.TrimSpace(rr.Body.Bytes())
+	var out dockertypes.StatsJSON
+	if err := json.Unmarshal(body, &out); err != nil {
+		t.Fatalf("docker SDK cannot unmarshal StatsJSON: %v\nbody=%s", err, body)
+	}
+	if out.Name != "/ctr-stats" {
+		t.Errorf("Name: got %q, want /ctr-stats", out.Name)
+	}
+}
+
+func TestDockerCompat_Stats_404OnMissingContainer(t *testing.T) {
+	srv := NewServer(&stubRuntime{
+		containerInspect: func(ctx context.Context, id string) ([]byte, error) {
+			return nil, errors.New("no such container")
+		},
+	}, "")
+
+	rr := doGET(t, srv, "/containers/nope/stats?stream=0")
+	if rr.Code != http.StatusNotFound {
+		t.Errorf("status: got %d, want 404", rr.Code)
+	}
+}
+
+func TestDockerCompat_Logs_EmitsFramedOutput(t *testing.T) {
+	// Docker CLI / lazydocker decode logs using the same 8-byte multiplex
+	// frame format as /exec/{id}/start. Previously gocker wrote raw bytes
+	// and clients rendered garbage. Assert the frame shape.
+	srv := NewServer(&stubRuntime{
+		exec: func(ctx context.Context, args ...string) ([]byte, []byte, error) {
+			return []byte("hi\n"), nil, nil
+		},
+	}, "")
+
+	rr := doGET(t, srv, "/containers/ctr/logs")
+	if rr.Code != http.StatusOK {
+		t.Fatalf("status: got %d, want 200", rr.Code)
+	}
+	// Expected frame: [01 00 00 00  00 00 00 03]  h i \n
+	want := []byte{1, 0, 0, 0, 0, 0, 0, 3, 'h', 'i', '\n'}
+	if !bytes.Equal(rr.Body.Bytes(), want) {
+		t.Errorf("framed output mismatch:\n  got  %x\n  want %x", rr.Body.Bytes(), want)
 	}
 }
 

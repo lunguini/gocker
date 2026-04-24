@@ -19,6 +19,7 @@ type stubRuntime struct {
 	containerInspect func(ctx context.Context, nameOrID string) ([]byte, error)
 	containerList    func(ctx context.Context, all bool) ([]engine.ContainerInfo, error)
 	containerRun     func(ctx context.Context, args []string, interactive bool) error
+	exec             func(ctx context.Context, args ...string) ([]byte, []byte, error)
 	execStream       func(ctx context.Context, args ...string) (io.ReadCloser, error)
 	imageList        func(ctx context.Context) ([]engine.ImageInfo, error)
 	networkList      func(ctx context.Context) ([]engine.NetworkInfo, error)
@@ -30,6 +31,9 @@ type stubRuntime struct {
 func (s *stubRuntime) Validate() error    { return nil }
 func (s *stubRuntime) BinaryPath() string { return "" }
 func (s *stubRuntime) Exec(ctx context.Context, args ...string) ([]byte, []byte, error) {
+	if s.exec != nil {
+		return s.exec(ctx, args...)
+	}
 	return nil, nil, nil
 }
 func (s *stubRuntime) ExecInteractive(ctx context.Context, args ...string) error { return nil }

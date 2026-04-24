@@ -52,6 +52,7 @@ func (s *Server) registerRoutes() {
 	s.mux.HandleFunc("DELETE /containers/{id}", s.handleContainerRemove)
 	s.mux.HandleFunc("GET /containers/{id}/json", s.handleContainerInspect)
 	s.mux.HandleFunc("GET /containers/{id}/logs", s.handleContainerLogs)
+	s.mux.HandleFunc("GET /containers/{id}/stats", s.handleContainerStats)
 	s.mux.HandleFunc("POST /containers/{id}/exec", s.handleExecCreate)
 	s.mux.HandleFunc("POST /exec/{id}/start", s.handleExecStart)
 	s.mux.HandleFunc("GET /exec/{id}/json", s.handleExecInspect)
