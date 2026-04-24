@@ -495,26 +495,35 @@ func TestDockerCompat_ExecStart_HijackedStream(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	// Drain the connection until EOF or deadline. The headers and framed
+	// payload can arrive in separate TCP segments — a single Read() often
+	// returns only the headers (reproduces as a CI flake but a local pass).
+	var all bytes.Buffer
 	buf := make([]byte, 4096)
-	n, err := conn.Read(buf)
-	if err != nil && err != io.EOF {
-		t.Fatalf("read: %v", err)
+	for {
+		n, err := conn.Read(buf)
+		if n > 0 {
+			all.Write(buf[:n])
+		}
+		if err != nil {
+			break
+		}
 	}
-	body := string(buf[:n])
+	body := all.Bytes()
 
 	// Assert on the status line the CLI checks for.
-	if !strings.HasPrefix(body, "HTTP/1.1 101 ") {
+	if !bytes.HasPrefix(body, []byte("HTTP/1.1 101 ")) {
 		t.Errorf("expected 101 Switching Protocols, got:\n%s", body)
 	}
 	// Content-Type must signal the raw-stream protocol.
-	if !strings.Contains(body, "application/vnd.docker.raw-stream") {
+	if !bytes.Contains(body, []byte("application/vnd.docker.raw-stream")) {
 		t.Errorf("expected application/vnd.docker.raw-stream content type; got:\n%s", body)
 	}
 	// The 3-byte "hi\n" payload should appear framed: 8-byte header
-	// then 3 bytes of data. Look for the header pattern 01 00 00 00 00 00 00 03.
+	// then 3 bytes of data. Pattern: 01 00 00 00 00 00 00 03 'h' 'i' '\n'.
 	frame := []byte{1, 0, 0, 0, 0, 0, 0, 3, 'h', 'i', '\n'}
-	if !bytes.Contains(buf[:n], frame) {
-		t.Errorf("expected framed stdout payload for 'hi\\n', got raw bytes:\n%x", buf[:n])
+	if !bytes.Contains(body, frame) {
+		t.Errorf("expected framed stdout payload for 'hi\\n', got raw bytes:\n%x", body)
 	}
 }
 

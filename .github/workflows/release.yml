@@ -9,7 +9,27 @@ permissions:
   contents: write
 
 jobs:
+  # Gate release on tests so a broken tag never ships. Integration tests
+  # are skipped because they need a real container runtime; unit + lint +
+  # cross-build is enough to catch signature/API drift.
+  test:
+    name: Pre-release tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.24"
+      - name: Unit tests
+        run: go test ./...
+      - name: Cross-compile Linux
+        run: |
+          GOOS=linux GOARCH=amd64 go build ./...
+          GOOS=linux GOARCH=arm64 go build ./...
+      - uses: golangci/golangci-lint-action@v7
+
   release:
+    needs: test
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
