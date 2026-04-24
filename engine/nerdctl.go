@@ -316,6 +316,7 @@ func ParseNerdctlNetworkList(data []byte) ([]NetworkInfo, error) {
 			Name:   name,
 			Driver: getString(obj, "Driver", "driver"),
 			Scope:  getString(obj, "Scope", "scope"),
+			Labels: extractLabelsFromAny(obj),
 		})
 	}
 	return result, nil
@@ -385,6 +386,7 @@ func ParseNerdctlVolumeList(data []byte) ([]VolumeInfo, error) {
 			Name:       getString(obj, "Name", "name"),
 			Driver:     getString(obj, "Driver", "driver"),
 			Mountpoint: getString(obj, "Mountpoint", "mountpoint"),
+			Labels:     extractLabelsFromAny(obj),
 		}
 		result = append(result, info)
 	}

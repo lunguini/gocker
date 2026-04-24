@@ -52,6 +52,7 @@ func parseVolumeListJSON(data []byte) ([]VolumeInfo, error) {
 			Name:       getString(v, "name", "Name"),
 			Driver:     getString(v, "driver", "Driver"),
 			Mountpoint: getString(v, "mountpoint", "Mountpoint"),
+			Labels:     extractLabelsFromAny(v),
 		}
 		if created := getString(v, "created", "Created", "createdAt", "CreatedAt"); created != "" {
 			if t, err := time.Parse(time.RFC3339, created); err == nil {

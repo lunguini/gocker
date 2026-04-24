@@ -424,3 +424,46 @@ func getString(m map[string]any, keys ...string) string {
 	}
 	return ""
 }
+
+// extractStringMap pulls a map[string]string out of a raw inspect payload,
+// trying each candidate key (for the case-insensitive Apple CLI / nerdctl
+// naming split) and returning an empty (non-nil) map if nothing matches.
+// Non-string values are rendered via %v so the wire shape still satisfies
+// Docker SDK's strict decoders.
+func extractStringMap(m map[string]any, keys ...string) map[string]string {
+	for _, k := range keys {
+		raw, ok := m[k]
+		if !ok {
+			continue
+		}
+		if mm, ok := raw.(map[string]any); ok {
+			out := make(map[string]string, len(mm))
+			for k2, v := range mm {
+				out[k2] = fmt.Sprintf("%v", v)
+			}
+			return out
+		}
+	}
+	return map[string]string{}
+}
+
+// extractLabels is extractStringMap pinned to the "labels" / "Labels" keys,
+// with a fallback to `config.labels` which is where Apple's `container
+// network inspect` nests them. Compose relies on labels being passed
+// through verbatim to decide whether a network/volume is "its own" vs
+// foreign — returning an empty map causes compose to refuse its own
+// resources with "not created by Docker Compose, use external: true".
+func extractLabels(m map[string]any) map[string]string {
+	if labels := extractStringMap(m, "labels", "Labels"); len(labels) > 0 {
+		return labels
+	}
+	// Apple CLI: labels live under config.labels in network inspect output.
+	for _, nestedKey := range []string{"config", "Config"} {
+		if nested, ok := m[nestedKey].(map[string]any); ok {
+			if labels := extractStringMap(nested, "labels", "Labels"); len(labels) > 0 {
+				return labels
+			}
+		}
+	}
+	return map[string]string{}
+}

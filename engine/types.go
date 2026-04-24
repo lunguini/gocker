@@ -29,6 +29,12 @@ type NetworkInfo struct {
 	Name   string
 	Driver string
 	Scope  string
+	// Labels are the resource labels set at create time. Critical for
+	// Docker Compose compatibility: compose reads
+	// com.docker.compose.project to decide whether a network is "its own"
+	// vs foreign. Returning empty labels causes compose to refuse its own
+	// networks with "not created by Docker Compose".
+	Labels map[string]string
 }
 
 type VolumeInfo struct {
@@ -36,6 +42,9 @@ type VolumeInfo struct {
 	Driver     string
 	Mountpoint string
 	Created    time.Time
+	// Labels — see NetworkInfo.Labels. Compose checks
+	// com.docker.compose.project here too.
+	Labels map[string]string
 }
 
 type InspectData struct {

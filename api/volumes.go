@@ -14,10 +14,15 @@ func (s *Server) handleVolumeList(w http.ResponseWriter, r *http.Request) {
 
 	var result []*VolumeJSON
 	for _, v := range volumes {
+		labels := v.Labels
+		if labels == nil {
+			labels = map[string]string{}
+		}
 		result = append(result, &VolumeJSON{
 			Name:       v.Name,
 			Driver:     v.Driver,
 			Mountpoint: v.Mountpoint,
+			Labels:     labels,
 		})
 	}
 	writeJSON(w, http.StatusOK, VolumeListResponse{Volumes: result})
@@ -82,8 +87,12 @@ func (s *Server) handleVolumeInspect(w http.ResponseWriter, r *http.Request) {
 		"Mountpoint": getString(raw, "mountpoint", "Mountpoint", "source", "Source"),
 		"CreatedAt":  getString(raw, "createdAt", "CreatedAt", "created", "Created"),
 		"Scope":      "local",
-		"Labels":     map[string]string{},
-		"Options":    map[string]string{},
+		// Labels must be passed through — Docker Compose reads
+		// com.docker.compose.project off them to decide "is this mine".
+		// Returning an empty map causes compose to reject its OWN volumes
+		// with "not created by Docker Compose" on every up.
+		"Labels":  extractLabels(raw),
+		"Options": extractStringMap(raw, "options", "Options"),
 	}
 	writeJSON(w, http.StatusOK, resp)
 }

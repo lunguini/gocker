@@ -527,6 +527,130 @@ func TestDockerCompat_ExecStart_HijackedStream(t *testing.T) {
 	}
 }
 
+func TestDockerCompat_NetworkInspect_PassesLabelsThrough(t *testing.T) {
+	// Docker Compose reads com.docker.compose.project off network labels
+	// to decide "is this mine" on every compose up. If gocker hardcodes
+	// Labels: {} in the inspect reshape, compose rejects its own networks
+	// with "not created by Docker Compose, use external: true".
+	srv := NewServer(&stubRuntime{
+		networkInspect: func(ctx context.Context, name string) ([]byte, error) {
+			return []byte(`[{"id":"net-abc","name":"myproj_default","labels":{"com.docker.compose.project":"myproj","com.docker.compose.network":"default"}}]`), nil
+		},
+	}, "")
+
+	rr := doGET(t, srv, "/networks/myproj_default")
+	if rr.Code != http.StatusOK {
+		t.Fatalf("status: got %d, want 200", rr.Code)
+	}
+	var out dockertypes.NetworkResource
+	if err := json.Unmarshal(rr.Body.Bytes(), &out); err != nil {
+		t.Fatalf("unmarshal: %v; body=%s", err, rr.Body.String())
+	}
+	if out.Labels["com.docker.compose.project"] != "myproj" {
+		t.Errorf("compose project label lost: got Labels=%v", out.Labels)
+	}
+	if out.Labels["com.docker.compose.network"] != "default" {
+		t.Errorf("compose network label lost: got Labels=%v", out.Labels)
+	}
+}
+
+func TestDockerCompat_NetworkInspect_LabelsUnderConfigAppleShape(t *testing.T) {
+	// Apple Container CLI's `container network inspect` nests labels under
+	// `config.labels`, not at the top level. Make sure we still find them.
+	srv := NewServer(&stubRuntime{
+		networkInspect: func(ctx context.Context, name string) ([]byte, error) {
+			return []byte(`[{"id":"myproj_default","config":{"id":"myproj_default","labels":{"com.docker.compose.project":"myproj"}},"state":"running"}]`), nil
+		},
+	}, "")
+
+	rr := doGET(t, srv, "/networks/myproj_default")
+	var out dockertypes.NetworkResource
+	_ = json.Unmarshal(rr.Body.Bytes(), &out)
+	if out.Labels["com.docker.compose.project"] != "myproj" {
+		t.Errorf("nested config.labels not extracted: got Labels=%v", out.Labels)
+	}
+}
+
+func TestDockerCompat_VolumeList_PassesLabelsThrough(t *testing.T) {
+	// Compose's network/volume ownership check queries the LIST endpoint
+	// first. Previously VolumeJSON had no Labels field so compose saw
+	// empty labels and refused its own volumes on every `up`.
+	srv := NewServer(&stubRuntime{
+		volumeList: func(ctx context.Context) ([]engine.VolumeInfo, error) {
+			return []engine.VolumeInfo{{
+				Name:   "myproj_data",
+				Driver: "local",
+				Labels: map[string]string{
+					"com.docker.compose.project": "myproj",
+					"com.docker.compose.volume":  "data",
+				},
+			}}, nil
+		},
+	}, "")
+
+	rr := doGET(t, srv, "/volumes")
+	var out dockervolume.ListResponse
+	if err := json.Unmarshal(rr.Body.Bytes(), &out); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	if len(out.Volumes) != 1 {
+		t.Fatalf("expected 1 volume, got %d", len(out.Volumes))
+	}
+	if out.Volumes[0].Labels["com.docker.compose.project"] != "myproj" {
+		t.Errorf("labels lost in list response: %+v", out.Volumes[0].Labels)
+	}
+}
+
+func TestDockerCompat_NetworkList_PassesLabelsThrough(t *testing.T) {
+	srv := NewServer(&stubRuntime{
+		networkList: func(ctx context.Context) ([]engine.NetworkInfo, error) {
+			return []engine.NetworkInfo{{
+				ID:   "net-abc",
+				Name: "myproj_default",
+				Labels: map[string]string{
+					"com.docker.compose.project": "myproj",
+					"com.docker.compose.network": "default",
+				},
+			}}, nil
+		},
+	}, "")
+
+	rr := doGET(t, srv, "/networks")
+	var out []dockertypes.NetworkResource
+	if err := json.Unmarshal(rr.Body.Bytes(), &out); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	if len(out) != 1 {
+		t.Fatalf("expected 1 network, got %d", len(out))
+	}
+	if out[0].Labels["com.docker.compose.project"] != "myproj" {
+		t.Errorf("labels lost in list response: %+v", out[0].Labels)
+	}
+}
+
+func TestDockerCompat_VolumeInspect_PassesLabelsThrough(t *testing.T) {
+	srv := NewServer(&stubRuntime{
+		volumeInspect: func(ctx context.Context, name string) ([]byte, error) {
+			return []byte(`[{"name":"myproj_data","driver":"local","labels":{"com.docker.compose.project":"myproj","com.docker.compose.volume":"data"}}]`), nil
+		},
+	}, "")
+
+	rr := doGET(t, srv, "/volumes/myproj_data")
+	if rr.Code != http.StatusOK {
+		t.Fatalf("status: got %d, want 200", rr.Code)
+	}
+	var out dockervolume.Volume
+	if err := json.Unmarshal(rr.Body.Bytes(), &out); err != nil {
+		t.Fatalf("unmarshal: %v; body=%s", err, rr.Body.String())
+	}
+	if out.Labels["com.docker.compose.project"] != "myproj" {
+		t.Errorf("compose project label lost: got Labels=%v", out.Labels)
+	}
+	if out.Labels["com.docker.compose.volume"] != "data" {
+		t.Errorf("compose volume label lost: got Labels=%v", out.Labels)
+	}
+}
+
 func TestDockerCompat_VolumeInspect_EmptyArrayReturns404(t *testing.T) {
 	srv := NewServer(&stubRuntime{
 		volumeInspect: func(ctx context.Context, name string) ([]byte, error) {

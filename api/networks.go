@@ -14,11 +14,16 @@ func (s *Server) handleNetworkList(w http.ResponseWriter, r *http.Request) {
 
 	var result []NetworkJSON
 	for _, n := range networks {
+		labels := n.Labels
+		if labels == nil {
+			labels = map[string]string{}
+		}
 		result = append(result, NetworkJSON{
 			ID:     n.ID,
 			Name:   n.Name,
 			Driver: n.Driver,
 			Scope:  n.Scope,
+			Labels: labels,
 		})
 	}
 	if result == nil {
@@ -70,8 +75,12 @@ func (s *Server) handleNetworkInspect(w http.ResponseWriter, r *http.Request) {
 		"ConfigFrom": map[string]any{"Network": ""},
 		"ConfigOnly": false,
 		"Containers": map[string]any{},
-		"Options":    map[string]string{},
-		"Labels":     map[string]string{},
+		"Options":    extractStringMap(raw, "options", "Options"),
+		// Labels must be passed through — Docker Compose reads
+		// com.docker.compose.project off them to decide "is this mine".
+		// Returning an empty map causes compose to reject its OWN networks
+		// with "not created by Docker Compose" on every up.
+		"Labels": extractLabels(raw),
 	}
 	writeJSON(w, http.StatusOK, resp)
 }

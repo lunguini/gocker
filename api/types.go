@@ -102,10 +102,11 @@ type ImageJSON struct {
 }
 
 type NetworkJSON struct {
-	ID     string `json:"Id"`
-	Name   string `json:"Name"`
-	Driver string `json:"Driver"`
-	Scope  string `json:"Scope"`
+	ID     string            `json:"Id"`
+	Name   string            `json:"Name"`
+	Driver string            `json:"Driver"`
+	Scope  string            `json:"Scope"`
+	Labels map[string]string `json:"Labels"`
 }
 
 type NetworkCreateRequest struct {
@@ -118,9 +119,10 @@ type NetworkConnectRequest struct {
 }
 
 type VolumeJSON struct {
-	Name       string `json:"Name"`
-	Driver     string `json:"Driver"`
-	Mountpoint string `json:"Mountpoint"`
+	Name       string            `json:"Name"`
+	Driver     string            `json:"Driver"`
+	Mountpoint string            `json:"Mountpoint"`
+	Labels     map[string]string `json:"Labels"`
 }
 
 type VolumeListResponse struct {
