@@ -4,8 +4,11 @@ on:
   schedule:
     - cron: '0 6 * * 1' # Weekly on Monday at 6am UTC
   push:
+    branches:
+      - main  # Rebuild :*-dev on every main commit so `go install @main`
+              # users have an in-VM gocker binary that tracks the Go source.
     tags:
-      - "v*" # Also trigger on version tags for versioned image tags
+      - "v*" # Tagged releases → versioned image tags + :*-latest.
   workflow_dispatch: # Manual trigger
 
 jobs:
@@ -17,10 +20,14 @@ jobs:
       - name: Determine tags
         id: tags
         run: |
-          TAGS="adyjay/gocker:claude-latest"
           if [[ "$GITHUB_REF" == refs/tags/v* ]]; then
             VERSION="${GITHUB_REF#refs/tags/}"
-            TAGS="$TAGS,adyjay/gocker:claude-${VERSION}"
+            TAGS="adyjay/gocker:claude-latest,adyjay/gocker:claude-${VERSION}"
+          elif [[ "$GITHUB_REF" == refs/heads/main ]]; then
+            # Bleeding edge — track main, don't touch :claude-latest.
+            TAGS="adyjay/gocker:claude-dev"
+          else
+            TAGS="adyjay/gocker:claude-latest"
           fi
           echo "tags=$TAGS" >> "$GITHUB_OUTPUT"
 
@@ -52,10 +59,14 @@ jobs:
         id: meta
         run: |
           VERSION=$(git describe --tags --always --dirty 2>/dev/null || echo dev)
-          TAGS="adyjay/gocker:base-latest"
           if [[ "$GITHUB_REF" == refs/tags/v* ]]; then
             VERSION="${GITHUB_REF#refs/tags/}"
-            TAGS="$TAGS,adyjay/gocker:base-${VERSION}"
+            TAGS="adyjay/gocker:base-latest,adyjay/gocker:base-${VERSION}"
+          elif [[ "$GITHUB_REF" == refs/heads/main ]]; then
+            # Bleeding edge — track main, don't touch :base-latest.
+            TAGS="adyjay/gocker:base-dev"
+          else
+            TAGS="adyjay/gocker:base-latest"
           fi
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
           echo "tags=$TAGS" >> "$GITHUB_OUTPUT"

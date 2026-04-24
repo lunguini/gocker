@@ -3,9 +3,25 @@ package config
 import (
 	"os"
 	"path/filepath"
+	"regexp"
 
 	"gopkg.in/yaml.v3"
 )
+
+// cleanSemverTag matches exactly vX.Y.Z with no pre-release / build suffix.
+// git describe on a commit ahead of the tag appends -<n>-g<sha>; on a dirty
+// tree, -dirty — both fail this match and are treated as dev builds.
+var cleanSemverTag = regexp.MustCompile(`^v\d+\.\d+\.\d+$`)
+
+// IsDevVersion reports whether the given ldflags-injected version string
+// represents a non-release build. Used to pick :base-dev over :base-latest
+// by default so `go install @main` gets a matching in-VM gocker binary.
+func IsDevVersion(v string) bool {
+	if v == "" || v == "dev" {
+		return true
+	}
+	return !cleanSemverTag.MatchString(v)
+}
 
 // Config represents ~/.gocker/config.yaml.
 type Config struct {

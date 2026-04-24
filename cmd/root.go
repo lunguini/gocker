@@ -11,8 +11,21 @@ import (
 	"github.com/urfave/cli/v3"
 )
 
+const (
+	defaultBaseLatestImage = "docker.io/adyjay/gocker:base-latest"
+	defaultBaseDevImage    = "docker.io/adyjay/gocker:base-dev"
+)
+
 func NewApp(version string) *cli.Command {
 	cfg := config.Load()
+
+	// Dev builds (go install @main or local `make build` between tags) pull
+	// :base-dev instead of :base-latest by default. :base-dev tracks main
+	// and is pushed on every main commit; :base-latest only moves on a
+	// tagged release. Users can still override explicitly in config.yaml.
+	if config.IsDevVersion(version) && cfg.SharedVM.Image == defaultBaseLatestImage {
+		cfg.SharedVM.Image = defaultBaseDevImage
+	}
 
 	// Auto-detect runtime based on platform and config
 	appleRT, detectErr := engine.DetectRuntime(cfg.RuntimeBinary())
