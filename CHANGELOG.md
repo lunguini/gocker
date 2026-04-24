@@ -1,5 +1,10 @@
 # Changelog
 
+## v0.7.5
+
+- fix: CI-stable exec hijack test + gate release on tests
+- docs: update CHANGELOG.md for v0.7.4
+
 ## v0.7.4
 
 - feat(api): implement exec HTTP hijack + /exec/{id}/json; compat-audit non-blocking
