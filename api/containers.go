@@ -34,9 +34,9 @@ func (s *Server) handleContainerList(w http.ResponseWriter, r *http.Request) {
 			Image:   c.Image,
 			Command: c.Command,
 			Created: c.Created.Unix(),
-			State:   c.State,
+			State:   deriveContainerState(c.State, c.Status),
 			Status:  c.Status,
-			Ports:   []PortMapping{},
+			Ports:   parseNerdctlPorts(c.Ports),
 			NetworkSettings: &NetworkSettings{
 				Networks: map[string]*EndpointSettings{
 					"bridge": {IPAddress: c.IP},
