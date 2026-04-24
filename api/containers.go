@@ -57,6 +57,14 @@ func (s *Server) handleContainerCreate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// ext4-formatted volumes (Apple Container CLI's default) have a
+	// lost+found directory at the root which breaks initdb-style data-dir
+	// setup for Postgres/MySQL. Docker's ext4 volumes don't have this.
+	// Inject the appropriate env var pointing at a subdirectory — users
+	// running `docker compose up` against gocker shouldn't have to know
+	// about this themselves.
+	req.Env = applyInitDirWorkarounds(req.Image, req.HostConfig, req.Env)
+
 	name := r.URL.Query().Get("name")
 	var args []string
 	args = append(args, "-d")
