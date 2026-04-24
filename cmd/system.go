@@ -61,7 +61,12 @@ func newSystemCmd(eng engine.Runtime) *cli.Command {
   - dangling images (no repo:tag)
 
 Use --volumes to also remove all unused volumes.
-Use -a/--all to remove all unused images (not just dangling).`,
+Use -a/--all to remove all unused images (not just dangling).
+
+Note: 'unused' means the backend will let us remove it. Resources attached
+to a running container are silently skipped — stop those containers first
+if you need them gone. -f/--force skips the confirmation prompt; it does
+NOT force-delete in-use resources (matching Docker's behavior).`,
 				Flags: []cli.Flag{
 					&cli.BoolFlag{
 						Name:    "all",
@@ -75,7 +80,7 @@ Use -a/--all to remove all unused images (not just dangling).`,
 					&cli.BoolFlag{
 						Name:    "force",
 						Aliases: []string{"f"},
-						Usage:   "Do not prompt for confirmation (currently always non-interactive)",
+						Usage:   "Do not prompt for confirmation",
 					},
 				},
 				Action: func(ctx context.Context, cmd *cli.Command) error {

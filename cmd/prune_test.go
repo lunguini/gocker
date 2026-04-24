@@ -21,6 +21,10 @@ func TestIsInUseError(t *testing.T) {
 		// a soft skip because the backend was right to refuse, but the
 		// message doesn't tell us why.
 		`Error: failed to delete one or more networks: ["foo"]: exit status 1`: true,
+		// Apple CLI's in-use refusal for a single named network — observed
+		// when a container still references a compose project's network.
+		`failed to delete network: ["id": proxy_proxy, "error": invalidState: "cannot delete subnet proxy_proxy with referring containers: backend-redis-1"]`: true,
+		`delete failed for one or more networks: ["proxy_proxy"]: exit status 1`:                                                                               true,
 	}
 	for msg, want := range cases {
 		var err error

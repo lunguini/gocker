@@ -36,7 +36,11 @@ func isInUseError(err error) bool {
 		"has active endpoints",
 		"is being used",
 		"has dependent child",
-		"failed to delete one or more", // Apple CLI generic wrapper
+		"referring containers",          // Apple CLI: "cannot delete subnet X with referring containers: Y"
+		"cannot delete subnet",          // Apple CLI outer wrapper for the above
+		"invalidstate",                  // Apple CLI state-check refusal (e.g. running container holding a volume)
+		"failed to delete one or more",  // Apple CLI generic multi-delete wrapper (we see this when a single named resource is in use)
+		"delete failed for one or more", // Apple CLI alternate wrapper (newer versions)
 	}
 	for _, p := range patterns {
 		if strings.Contains(msg, p) {
