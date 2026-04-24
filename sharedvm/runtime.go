@@ -103,8 +103,12 @@ func (s *SharedVMRuntime) ContainerRun(ctx context.Context, args []string, inter
 }
 
 func (s *SharedVMRuntime) ContainerList(ctx context.Context, all bool) ([]engine.ContainerInfo, error) {
-	if err := s.manager.EnsureRunning(ctx); err != nil {
+	running, err := s.manager.EnsureRunningIfExists(ctx)
+	if err != nil {
 		return nil, err
+	}
+	if !running {
+		return nil, nil
 	}
 	args := []string{"--format", "json", "ps"}
 	if all {
@@ -235,8 +239,12 @@ func (s *SharedVMRuntime) ImagePush(ctx context.Context, image string) error {
 }
 
 func (s *SharedVMRuntime) ImageList(ctx context.Context) ([]engine.ImageInfo, error) {
-	if err := s.manager.EnsureRunning(ctx); err != nil {
+	running, err := s.manager.EnsureRunningIfExists(ctx)
+	if err != nil {
 		return nil, err
+	}
+	if !running {
+		return nil, nil
 	}
 	vmArgs := s.proxyArgs(false, "--format", "json", "images")
 	stdout, stderr, err := s.apple.Exec(ctx, vmArgs...)
@@ -280,8 +288,12 @@ func (s *SharedVMRuntime) NetworkCreate(ctx context.Context, name string) error 
 }
 
 func (s *SharedVMRuntime) NetworkList(ctx context.Context) ([]engine.NetworkInfo, error) {
-	if err := s.manager.EnsureRunning(ctx); err != nil {
+	running, err := s.manager.EnsureRunningIfExists(ctx)
+	if err != nil {
 		return nil, err
+	}
+	if !running {
+		return nil, nil
 	}
 	vmArgs := s.proxyArgs(false, "--format", "json", "network", "ls")
 	stdout, stderr, err := s.apple.Exec(ctx, vmArgs...)
@@ -322,8 +334,12 @@ func (s *SharedVMRuntime) VolumeCreate(ctx context.Context, name string) error {
 }
 
 func (s *SharedVMRuntime) VolumeList(ctx context.Context) ([]engine.VolumeInfo, error) {
-	if err := s.manager.EnsureRunning(ctx); err != nil {
+	running, err := s.manager.EnsureRunningIfExists(ctx)
+	if err != nil {
 		return nil, err
+	}
+	if !running {
+		return nil, nil
 	}
 	vmArgs := s.proxyArgs(false, "--format", "json", "volume", "ls")
 	stdout, stderr, err := s.apple.Exec(ctx, vmArgs...)

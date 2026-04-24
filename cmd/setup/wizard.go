@@ -4,6 +4,8 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"strconv"
+	"strings"
 
 	"github.com/lunguini/gocker/config"
 )
@@ -101,7 +103,28 @@ func promptResources(defCPU int, defMem string) (int, string) {
 	if _, err := fmt.Sscanf(cpuStr, "%d", &cpu); err != nil || cpu < 1 {
 		cpu = defCPU
 	}
-	mem := Input("VM memory", defMem)
+	mem := Input("VM memory (with K/M/G/T suffix, e.g. 4G)", defMem)
+	mem = normalizeMemory(mem, defMem)
 	return cpu, mem
+}
+
+// normalizeMemory ensures the memory string carries a unit suffix. Apple's
+// container CLI interprets a plain integer as *bytes*, so "4" becomes 4 bytes
+// and fails with "minimum memory amount allowed is 200 MiB". Users who type
+// "4" almost always mean "4G", so assume G when no suffix is given.
+func normalizeMemory(mem, fallback string) string {
+	mem = strings.TrimSpace(mem)
+	if mem == "" {
+		return fallback
+	}
+	last := mem[len(mem)-1]
+	switch last {
+	case 'K', 'k', 'M', 'm', 'G', 'g', 'T', 't', 'P', 'p', 'B', 'b':
+		return mem
+	}
+	if _, err := strconv.Atoi(mem); err == nil {
+		return mem + "G"
+	}
+	return mem
 }
 

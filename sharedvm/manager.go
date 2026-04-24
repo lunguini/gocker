@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 
@@ -51,6 +52,27 @@ func (m *Manager) Name() string {
 // Mounts returns the host→VM path mappings.
 func (m *Manager) Mounts() map[string]string {
 	return m.mounts
+}
+
+// EnsureRunningIfExists starts the VM if it exists but is stopped, and
+// returns (true, nil) if the VM is running after the call. If the VM does
+// not exist, it returns (false, nil) *without* creating it. Use this for
+// read-only operations (list, prune) that have nothing to do when the VM
+// has never been created.
+func (m *Manager) EnsureRunningIfExists(ctx context.Context) (bool, error) {
+	status := m.getContainerStatus(ctx)
+	switch status {
+	case "running":
+		return true, nil
+	case "stopped":
+		fmt.Fprintln(os.Stderr, "Starting shared VM...")
+		if err := m.apple.ContainerStart(ctx, m.name); err != nil {
+			return false, fmt.Errorf("starting shared VM: %w", err)
+		}
+		m.updateState("running")
+		return true, nil
+	}
+	return false, nil
 }
 
 // EnsureRunning ensures the shared VM is running, creating it if needed.
@@ -120,11 +142,12 @@ func (m *Manager) buildCreateArgs() []string {
 	args = append(args, "-d")
 	args = append(args, "--name", m.name)
 
-	memory := m.config.Memory
-	if memory == "" {
-		memory = "4G"
-	}
+	memory := normalizeMemory(m.config.Memory)
 	args = append(args, "-m", memory)
+
+	if m.config.CPUs > 0 {
+		args = append(args, "-c", fmt.Sprintf("%d", m.config.CPUs))
+	}
 
 	// Mount workspace directories
 	args = append(args, MountFlags(m.mounts)...)
@@ -305,6 +328,27 @@ func (m *Manager) ExpandMounts(ctx context.Context, paths []string) error {
 // listVMContainers lists containers running inside the shared VM.
 func (m *Manager) listVMContainers(ctx context.Context) ([]engine.ContainerInfo, error) {
 	return m.apple.ContainerList(ctx, true)
+}
+
+// normalizeMemory turns a user-supplied memory spec into something Apple's
+// container CLI understands. A bare integer (e.g. "4") is treated as bytes by
+// that CLI, which then fails with "minimum memory amount allowed is 200 MiB".
+// Users almost always mean gigabytes, so append G in that case. Empty or "0"
+// falls back to 4G.
+func normalizeMemory(mem string) string {
+	mem = strings.TrimSpace(mem)
+	if mem == "" || mem == "0" {
+		return "4G"
+	}
+	last := mem[len(mem)-1]
+	switch last {
+	case 'K', 'k', 'M', 'm', 'G', 'g', 'T', 't', 'P', 'p', 'B', 'b':
+		return mem
+	}
+	if _, err := strconv.Atoi(mem); err == nil {
+		return mem + "G"
+	}
+	return mem
 }
 
 func (m *Manager) updateState(status string) {
