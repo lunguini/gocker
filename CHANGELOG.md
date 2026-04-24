@@ -1,5 +1,11 @@
 # Changelog
 
+## v0.7.2
+
+- docs(compat): refresh matrix — gocker gained build -t, ps -a/-q, pull --platform
+- feat(prune): Docker-parity prune for containers, networks, volumes, and images
+- docs: update CHANGELOG.md for v0.7.1
+
 ## v0.7.1
 
 - docs: changelog for v0.7.1
