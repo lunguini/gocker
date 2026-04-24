@@ -108,6 +108,16 @@ func wrapRunErr(label string, args []string, stdout, stderr []byte, err error) e
 	return fmt.Errorf("%s: %w", msg, err)
 }
 
+// wrapNerdctlErr normalizes the stderr-less 'exit status 1' case for
+// nerdctl shell-outs that don't have additional context to fall back on.
+func wrapNerdctlErr(stderr []byte, err error) error {
+	msg := strings.TrimSpace(string(stderr))
+	if msg == "" {
+		msg = "nerdctl produced no output"
+	}
+	return fmt.Errorf("%s: %w", msg, err)
+}
+
 func (n *NerdctlRuntime) ContainerList(ctx context.Context, all bool) ([]ContainerInfo, error) {
 	args := []string{"ps", "--format", "json"}
 	if all {
@@ -153,7 +163,7 @@ func ParseNerdctlContainerList(data []byte) ([]ContainerInfo, error) {
 func (n *NerdctlRuntime) ContainerStop(ctx context.Context, nameOrID string) error {
 	_, stderr, err := n.Exec(ctx, "stop", nameOrID)
 	if err != nil {
-		return fmt.Errorf("%s: %w", strings.TrimSpace(string(stderr)), err)
+		return wrapNerdctlErr(stderr, err)
 	}
 	return nil
 }
@@ -161,7 +171,7 @@ func (n *NerdctlRuntime) ContainerStop(ctx context.Context, nameOrID string) err
 func (n *NerdctlRuntime) ContainerStart(ctx context.Context, nameOrID string) error {
 	_, stderr, err := n.Exec(ctx, "start", nameOrID)
 	if err != nil {
-		return fmt.Errorf("%s: %w", strings.TrimSpace(string(stderr)), err)
+		return wrapNerdctlErr(stderr, err)
 	}
 	return nil
 }
@@ -174,7 +184,7 @@ func (n *NerdctlRuntime) ContainerRemove(ctx context.Context, nameOrID string, f
 	args = append(args, nameOrID)
 	_, stderr, err := n.Exec(ctx, args...)
 	if err != nil {
-		return fmt.Errorf("%s: %w", strings.TrimSpace(string(stderr)), err)
+		return wrapNerdctlErr(stderr, err)
 	}
 	return nil
 }
@@ -190,7 +200,7 @@ func (n *NerdctlRuntime) ContainerExec(ctx context.Context, nameOrID string, arg
 	}
 	stdout, stderr, err := n.Exec(ctx, cmdArgs...)
 	if err != nil {
-		return fmt.Errorf("%s: %w", strings.TrimSpace(string(stderr)), err)
+		return wrapNerdctlErr(stderr, err)
 	}
 	out := strings.TrimSpace(string(stdout))
 	if out != "" {
@@ -207,7 +217,7 @@ func (n *NerdctlRuntime) ContainerLogs(ctx context.Context, nameOrID string, fol
 	}
 	stdout, stderr, err := n.Exec(ctx, args...)
 	if err != nil {
-		return fmt.Errorf("%s: %w", strings.TrimSpace(string(stderr)), err)
+		return wrapNerdctlErr(stderr, err)
 	}
 	out := string(stdout) + string(stderr)
 	if out != "" {
@@ -234,7 +244,17 @@ func (n *NerdctlRuntime) ImagePull(ctx context.Context, image string, opts Image
 	// nerdctl doesn't expose --max-concurrent-downloads at the CLI (containerd
 	// daemon config) or a --progress flag; silently drop those opts.
 	args = append(args, image)
-	return n.ExecInteractive(ctx, args...)
+	// Interactive for terminal users (shows progress); captured otherwise so
+	// daemon/API callers can surface the real error instead of a bare
+	// "exit status 1" with the stderr swallowed by /dev/null.
+	if isStdoutTTY() {
+		return n.ExecInteractive(ctx, args...)
+	}
+	stdout, stderr, err := n.Exec(ctx, args...)
+	if err != nil {
+		return wrapRunErr("nerdctl pull", args, stdout, stderr, err)
+	}
+	return nil
 }
 
 func (n *NerdctlRuntime) ImagePush(ctx context.Context, image string) error {
@@ -281,7 +301,7 @@ func ParseNerdctlImageList(data []byte) ([]ImageInfo, error) {
 func (n *NerdctlRuntime) ImageRemove(ctx context.Context, image string) error {
 	_, stderr, err := n.Exec(ctx, "rmi", image)
 	if err != nil {
-		return fmt.Errorf("%s: %w", strings.TrimSpace(string(stderr)), err)
+		return wrapNerdctlErr(stderr, err)
 	}
 	return nil
 }
@@ -296,7 +316,7 @@ func (n *NerdctlRuntime) ImageBuild(ctx context.Context, args []string) error {
 func (n *NerdctlRuntime) NetworkCreate(ctx context.Context, name string) error {
 	_, stderr, err := n.Exec(ctx, "network", "create", name)
 	if err != nil {
-		return fmt.Errorf("%s: %w", strings.TrimSpace(string(stderr)), err)
+		return wrapNerdctlErr(stderr, err)
 	}
 	return nil
 }
@@ -344,7 +364,7 @@ func ParseNerdctlNetworkList(data []byte) ([]NetworkInfo, error) {
 func (n *NerdctlRuntime) NetworkRemove(ctx context.Context, name string) error {
 	_, stderr, err := n.Exec(ctx, "network", "rm", name)
 	if err != nil {
-		return fmt.Errorf("%s: %w", strings.TrimSpace(string(stderr)), err)
+		return wrapNerdctlErr(stderr, err)
 	}
 	return nil
 }
@@ -352,7 +372,7 @@ func (n *NerdctlRuntime) NetworkRemove(ctx context.Context, name string) error {
 func (n *NerdctlRuntime) NetworkConnect(ctx context.Context, network, container string) error {
 	_, stderr, err := n.Exec(ctx, "network", "connect", network, container)
 	if err != nil {
-		return fmt.Errorf("%s: %w", strings.TrimSpace(string(stderr)), err)
+		return wrapNerdctlErr(stderr, err)
 	}
 	return nil
 }
@@ -360,7 +380,7 @@ func (n *NerdctlRuntime) NetworkConnect(ctx context.Context, network, container 
 func (n *NerdctlRuntime) NetworkDisconnect(ctx context.Context, network, container string) error {
 	_, stderr, err := n.Exec(ctx, "network", "disconnect", network, container)
 	if err != nil {
-		return fmt.Errorf("%s: %w", strings.TrimSpace(string(stderr)), err)
+		return wrapNerdctlErr(stderr, err)
 	}
 	return nil
 }
@@ -378,7 +398,7 @@ func (n *NerdctlRuntime) NetworkInspect(ctx context.Context, name string) ([]byt
 func (n *NerdctlRuntime) VolumeCreate(ctx context.Context, name string) error {
 	_, stderr, err := n.Exec(ctx, "volume", "create", name)
 	if err != nil {
-		return fmt.Errorf("%s: %w", strings.TrimSpace(string(stderr)), err)
+		return wrapNerdctlErr(stderr, err)
 	}
 	return nil
 }
@@ -415,7 +435,7 @@ func ParseNerdctlVolumeList(data []byte) ([]VolumeInfo, error) {
 func (n *NerdctlRuntime) VolumeRemove(ctx context.Context, name string) error {
 	_, stderr, err := n.Exec(ctx, "volume", "rm", name)
 	if err != nil {
-		return fmt.Errorf("%s: %w", strings.TrimSpace(string(stderr)), err)
+		return wrapNerdctlErr(stderr, err)
 	}
 	return nil
 }

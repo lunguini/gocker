@@ -11,7 +11,18 @@ import (
 )
 
 func (e *Engine) ImagePull(ctx context.Context, image string, opts ImagePullOpts) error {
-	return e.ExecInteractive(ctx, buildPullArgs(image, opts, isStdoutTTY())...)
+	args := buildPullArgs(image, opts, isStdoutTTY())
+	// Non-TTY path is almost always the daemon — ExecInteractive's output
+	// goes to os.Stdout/Stderr which is /dev/null for the daemon, so errors
+	// vanish and the HTTP client just sees "exit status 1". Capture instead.
+	if !isStdoutTTY() {
+		stdout, stderr, err := e.Exec(ctx, args...)
+		if err != nil {
+			return wrapRunErr("container image pull", args, stdout, stderr, err)
+		}
+		return nil
+	}
+	return e.ExecInteractive(ctx, args...)
 }
 
 // buildPullArgs constructs the argv for `container image pull`. Exposed for testing.
