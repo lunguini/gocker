@@ -2,9 +2,11 @@ package setup
 
 import (
 	"bufio"
+	"context"
 	"fmt"
 	"io"
 	"os"
+	"os/exec"
 	"strconv"
 	"strings"
 
@@ -20,6 +22,55 @@ func IsInteractive() bool {
 	return term.IsTerminal(int(os.Stdin.Fd()))
 }
 
+// NormalizeTerminal forces the terminal into the standard line-editing
+// (canonical + echo) mode before prompting. Earlier steps in `gocker setup`
+// invoke the Apple `container` CLI via ExecInteractive; if it exits without
+// restoring termios cleanly, the terminal stays in raw mode and every
+// subsequent prompt hangs forever because Enter produces CR (`\r`), not
+// LF (`\n`) — and our line-readers wait for LF.
+//
+// `stty sane` is the cross-shell universal "fix my terminal" command. No-op
+// on non-interactive stdin and silent if stty isn't available.
+func NormalizeTerminal() {
+	if !IsInteractive() {
+		return
+	}
+	cmd := exec.CommandContext(context.Background(), "stty", "sane")
+	cmd.Stdin = os.Stdin
+	_ = cmd.Run()
+}
+
+// readLine reads from r until it sees '\n' or '\r', returns the line with
+// the terminator stripped. Works in both canonical-mode terminals (where
+// Enter sends '\n') and raw-mode terminals (where Enter sends '\r'). If
+// the terminator is '\r' immediately followed by '\n' (CRLF on Windows or
+// some telnet paths), consumes both so the next call doesn't see a stray
+// empty line.
+func readLine(r io.Reader) string {
+	br, ok := r.(*bufio.Reader)
+	if !ok {
+		br = bufio.NewReader(r)
+	}
+	var sb strings.Builder
+	for {
+		b, err := br.ReadByte()
+		if err != nil {
+			return sb.String()
+		}
+		if b == '\n' {
+			return sb.String()
+		}
+		if b == '\r' {
+			// Swallow a trailing '\n' if present (CRLF pair).
+			if next, perr := br.Peek(1); perr == nil && len(next) == 1 && next[0] == '\n' {
+				_, _ = br.ReadByte()
+			}
+			return sb.String()
+		}
+		sb.WriteByte(b)
+	}
+}
+
 // Confirm prompts for y/n and returns the answer. Uses def if input is empty or unparseable.
 func Confirm(prompt string, def bool) bool {
 	suffix := " [y/N]: "
@@ -31,8 +82,7 @@ func Confirm(prompt string, def bool) bool {
 }
 
 func parseConfirm(r io.Reader, def bool) bool {
-	line, _ := bufio.NewReader(r).ReadString('\n')
-	s := strings.ToLower(strings.TrimSpace(line))
+	s := strings.ToLower(strings.TrimSpace(readLine(r)))
 	switch s {
 	case "y", "yes":
 		return true
@@ -60,8 +110,7 @@ func Choose(prompt string, options []string, def string) string {
 }
 
 func parseChoice(r io.Reader, options []string, def string) string {
-	line, _ := bufio.NewReader(r).ReadString('\n')
-	s := strings.TrimSpace(line)
+	s := strings.TrimSpace(readLine(r))
 	if s == "" {
 		return def
 	}
@@ -79,8 +128,7 @@ func parseChoice(r io.Reader, options []string, def string) string {
 // Input prompts for a free-text string, returning def if empty.
 func Input(prompt, def string) string {
 	fmt.Printf("%s [default: %s]: ", prompt, def)
-	line, _ := stdinReader.ReadString('\n')
-	s := strings.TrimSpace(line)
+	s := strings.TrimSpace(readLine(stdinReader))
 	if s == "" {
 		return def
 	}

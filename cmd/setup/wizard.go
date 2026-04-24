@@ -17,6 +17,14 @@ type Options struct {
 // Called after install steps in 'gocker setup'.
 func RunWizard(ctx context.Context, opts Options) error {
 	interactive := !opts.NonInteractive && IsInteractive()
+	// Earlier install steps shell out to `container system start` in
+	// interactive mode. Even with save/restore around those calls, some
+	// paths (child crashing, signal delivery) leave the terminal in raw
+	// mode — Enter then produces CR not LF and our prompts hang forever.
+	// stty sane is the belt-and-suspenders fix; no-op when stdin isn't a TTY.
+	if interactive {
+		NormalizeTerminal()
+	}
 	existing := config.Load()
 
 	// Isolation.
