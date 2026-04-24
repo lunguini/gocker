@@ -15,6 +15,11 @@ type Config struct {
 	Sandbox   SandboxConfig `yaml:"sandbox,omitempty"`
 	Runtime   string        `yaml:"runtime,omitempty"`       // "container" or "nerdctl"
 	Binary    string        `yaml:"runtimeBinary,omitempty"` // custom path to runtime binary
+
+	// LegacyWorkspaceDirs accepts top-level `workspaceDirs:` for back-compat.
+	// Old configs (and hand-edited ones) placed it here instead of under
+	// sharedVM; Load() migrates it into SharedVM.WorkspaceDirs.
+	LegacyWorkspaceDirs []string `yaml:"workspaceDirs,omitempty"`
 }
 
 // SharedVM configures the persistent shared VM for hybrid/shared modes.
@@ -74,6 +79,13 @@ func Load() *Config {
 	}
 
 	_ = yaml.Unmarshal(data, cfg)
+
+	// Migrate top-level `workspaceDirs` into sharedVM.workspaceDirs.
+	if len(cfg.LegacyWorkspaceDirs) > 0 && len(cfg.SharedVM.WorkspaceDirs) == 0 {
+		cfg.SharedVM.WorkspaceDirs = cfg.LegacyWorkspaceDirs
+	}
+	cfg.LegacyWorkspaceDirs = nil
+
 	return cfg
 }
 

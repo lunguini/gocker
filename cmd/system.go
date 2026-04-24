@@ -6,26 +6,45 @@ import (
 	"runtime"
 	"strings"
 
+	"github.com/lunguini/gocker/config"
 	"github.com/lunguini/gocker/engine"
 	"github.com/urfave/cli/v3"
 )
 
-func infoAction(eng engine.Runtime) cli.ActionFunc {
+func infoAction(eng, appleRT engine.Runtime, version string) cli.ActionFunc {
 	return func(ctx context.Context, cmd *cli.Command) error {
 		if cmd.Args().Len() > 0 {
 			return cli.Exit("unexpected arguments: "+strings.Join(cmd.Args().Slice(), " "), 2)
 		}
-		fmt.Println("Gocker version: 0.1.0")
-		fmt.Printf("OS/Arch: %s/%s\n", runtime.GOOS, runtime.GOARCH)
-		fmt.Printf("Container binary: %s\n", eng.BinaryPath())
+		cfg := config.Load()
+		isolation := cfg.IsolationFor("", cmd.Root().String("isolation"))
+		if isolation == "" {
+			isolation = "full"
+		}
 
-		stdout, _, err := eng.Exec(ctx, "version")
-		if err == nil {
-			fmt.Printf("Container CLI version: %s", string(stdout))
+		fmt.Printf("Gocker version: %s\n", version)
+		fmt.Printf("OS/Arch: %s/%s\n", runtime.GOOS, runtime.GOARCH)
+		fmt.Printf("Isolation: %s\n", isolation)
+		fmt.Printf("Container binary: %s\n", appleRT.BinaryPath())
+
+		// Query the Apple CLI directly — eng may be SharedVMRuntime, which
+		// would proxy `version` into the VM and return gocker's own version
+		// instead of the Apple container CLI version.
+		if stdout, _, err := appleRT.Exec(ctx, "--version"); err == nil {
+			line := strings.TrimSpace(string(stdout))
+			if line != "" {
+				fmt.Printf("Container CLI version: %s\n", line)
+			}
 		}
 
 		containers, _ := eng.ContainerList(ctx, true)
-		fmt.Printf("Containers: %d\n", len(containers))
+		running := 0
+		for _, c := range containers {
+			if strings.HasPrefix(strings.ToLower(c.Status), "up") || strings.EqualFold(c.Status, "running") {
+				running++
+			}
+		}
+		fmt.Printf("Containers: %d (running: %d)\n", len(containers), running)
 
 		images, _ := eng.ImageList(ctx)
 		fmt.Printf("Images: %d\n", len(images))
@@ -34,15 +53,15 @@ func infoAction(eng engine.Runtime) cli.ActionFunc {
 	}
 }
 
-func newInfoCmd(eng engine.Runtime) *cli.Command {
+func newInfoCmd(eng, appleRT engine.Runtime, version string) *cli.Command {
 	return &cli.Command{
 		Name:   "info",
 		Usage:  "Display system-wide information",
-		Action: infoAction(eng),
+		Action: infoAction(eng, appleRT, version),
 	}
 }
 
-func newSystemCmd(eng engine.Runtime) *cli.Command {
+func newSystemCmd(eng, appleRT engine.Runtime, version string) *cli.Command {
 	return &cli.Command{
 		Name:  "system",
 		Usage: "Manage gocker system",
@@ -50,7 +69,7 @@ func newSystemCmd(eng engine.Runtime) *cli.Command {
 			{
 				Name:   "info",
 				Usage:  "Display system-wide information",
-				Action: infoAction(eng),
+				Action: infoAction(eng, appleRT, version),
 			},
 			{
 				Name:  "prune",

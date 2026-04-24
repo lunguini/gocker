@@ -3,6 +3,7 @@ package compose
 import (
 	"context"
 	"os"
+	"path/filepath"
 	"strings"
 
 	"github.com/lunguini/gocker/engine"
@@ -29,16 +30,29 @@ func (p *Proxy) Exec(ctx context.Context, args []string, interactive bool) error
 		return err
 	}
 
+	// Ensure the host CWD is reachable inside the VM. Without this, nerdctl
+	// compose either fails with "no configuration file provided" (no -f flag)
+	// or hits "file not found" translating a relative -f path. Same behavior
+	// as ContainerRun/ImageBuild for -v bind mounts.
+	cwd := resolvedCwd()
+	if cwd != "" {
+		if _, ok := sharedvm.TranslatePath(cwd, p.manager.Mounts()); !ok {
+			if parent, perr := sharedvm.ResolveMountParent(cwd); perr == nil {
+				if err := p.manager.ExpandMounts(ctx, []string{parent}); err != nil {
+					return err
+				}
+			}
+		}
+	}
+
 	translated := p.translateArgs(args)
 
 	// If no explicit file or project-directory flag, inject --project-directory
 	// so nerdctl finds compose files in the translated host CWD.
 	mounts := p.manager.Mounts()
-	if !hasFileFlag(translated) {
-		if cwd, err := os.Getwd(); err == nil {
-			if vmCwd, ok := sharedvm.TranslatePath(cwd, mounts); ok {
-				translated = append([]string{"--project-directory", vmCwd}, translated...)
-			}
+	if !hasFileFlag(translated) && cwd != "" {
+		if vmCwd, ok := sharedvm.TranslatePath(cwd, mounts); ok {
+			translated = append([]string{"--project-directory", vmCwd}, translated...)
 		}
 	}
 
@@ -93,6 +107,20 @@ func (p *Proxy) translateArgs(args []string) []string {
 		}
 	}
 	return result
+}
+
+// resolvedCwd returns the current working directory with symlinks resolved
+// (e.g. /tmp -> /private/tmp on macOS). VM mounts are always stored as
+// symlink-resolved paths, so TranslatePath needs the same form to match.
+func resolvedCwd() string {
+	cwd, err := os.Getwd()
+	if err != nil {
+		return ""
+	}
+	if resolved, err := filepath.EvalSymlinks(cwd); err == nil {
+		return resolved
+	}
+	return cwd
 }
 
 // hasFileFlag returns true if args contain -f, --file, or --project-directory.

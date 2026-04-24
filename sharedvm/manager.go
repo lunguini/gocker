@@ -63,6 +63,7 @@ func (m *Manager) EnsureRunningIfExists(ctx context.Context) (bool, error) {
 	status := m.getContainerStatus(ctx)
 	switch status {
 	case "running":
+		m.syncMountsFromVM(ctx)
 		return true, nil
 	case "stopped":
 		fmt.Fprintln(os.Stderr, "Starting shared VM...")
@@ -70,6 +71,7 @@ func (m *Manager) EnsureRunningIfExists(ctx context.Context) (bool, error) {
 			return false, fmt.Errorf("starting shared VM: %w", err)
 		}
 		m.updateState("running")
+		m.syncMountsFromVM(ctx)
 		return true, nil
 	}
 	return false, nil
@@ -80,6 +82,7 @@ func (m *Manager) EnsureRunning(ctx context.Context) error {
 	status := m.getContainerStatus(ctx)
 	switch status {
 	case "running":
+		m.syncMountsFromVM(ctx)
 		return nil
 	case "stopped":
 		fmt.Fprintln(os.Stderr, "Starting shared VM...")
@@ -87,6 +90,7 @@ func (m *Manager) EnsureRunning(ctx context.Context) error {
 			return fmt.Errorf("starting shared VM: %w", err)
 		}
 		m.updateState("running")
+		m.syncMountsFromVM(ctx)
 		return nil
 	}
 
@@ -274,9 +278,9 @@ func (m *Manager) ExpandMounts(ctx context.Context, paths []string) error {
 	}
 
 	// Check for running containers inside the VM
-	containers, err := m.listVMContainers(ctx)
-	if err == nil && len(containers) > 0 {
-		return fmt.Errorf("cannot expand mounts: containers are running in the shared VM (%d). Stop them first, or add paths to workspaceDirs in ~/.gocker/config.yaml", len(containers))
+	n, err := m.listVMContainers(ctx)
+	if err == nil && n > 0 {
+		return fmt.Errorf("cannot expand mounts: %d container(s) running in the shared VM. Stop them first, or add paths to sharedVM.workspaceDirs in ~/.gocker/config.yaml", n)
 	}
 
 	fmt.Fprintf(os.Stderr, "Recreating shared VM to add mount(s): %v\n", needed)
@@ -325,9 +329,64 @@ func (m *Manager) ExpandMounts(ctx context.Context, paths []string) error {
 	return nil
 }
 
-// listVMContainers lists containers running inside the shared VM.
-func (m *Manager) listVMContainers(ctx context.Context) ([]engine.ContainerInfo, error) {
-	return m.apple.ContainerList(ctx, true)
+// listVMContainers counts the containers running *inside* the shared VM via
+// nerdctl, not containers at the Apple-host level (which would include the
+// shared VM itself and any buildkit helpers — not what we care about for
+// "can we safely recreate the VM").
+func (m *Manager) listVMContainers(ctx context.Context) (int, error) {
+	stdout, _, err := m.apple.Exec(ctx, "exec", m.name, "nerdctl", "ps", "-q")
+	if err != nil {
+		return 0, err
+	}
+	n := 0
+	for _, line := range strings.Split(string(stdout), "\n") {
+		if strings.TrimSpace(line) != "" {
+			n++
+		}
+	}
+	return n, nil
+}
+
+// syncMountsFromVM reconciles the manager's in-memory mount map with what
+// the VM container actually has. Needed because a VM created in an earlier
+// session may have fewer mounts than the current config requests — without
+// this, TranslatePath lies about coverage and commands fail with confusing
+// "file not found" errors.
+func (m *Manager) syncMountsFromVM(ctx context.Context) {
+	data, err := m.apple.ContainerInspect(ctx, m.name)
+	if err != nil {
+		return
+	}
+	var raw []map[string]any
+	if json.Unmarshal(data, &raw) != nil || len(raw) == 0 {
+		var one map[string]any
+		if json.Unmarshal(data, &one) != nil {
+			return
+		}
+		raw = []map[string]any{one}
+	}
+	cfg, _ := raw[0]["configuration"].(map[string]any)
+	if cfg == nil {
+		return
+	}
+	mountsAny, _ := cfg["mounts"].([]any)
+	actual := map[string]string{}
+	for _, ma := range mountsAny {
+		mm, _ := ma.(map[string]any)
+		if mm == nil {
+			continue
+		}
+		src, _ := mm["source"].(string)
+		dst, _ := mm["destination"].(string)
+		if src == "" || dst == "" {
+			continue
+		}
+		src = filepath.Clean(src)
+		actual[src] = dst
+	}
+	if len(actual) > 0 {
+		m.mounts = actual
+	}
 }
 
 // normalizeMemory turns a user-supplied memory spec into something Apple's

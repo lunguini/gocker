@@ -97,7 +97,7 @@ func NewApp(version string) *cli.Command {
 			newExecCmd(generalRT),
 			newImageCmd(generalRT),
 			newImagesCmd(generalRT),
-			newInfoCmd(generalRT),
+			newInfoCmd(generalRT, appleRT, version),
 			newInspectCmd(generalRT),
 			newLogsCmd(generalRT),
 			newNetworkCmd(generalRT),
@@ -111,7 +111,7 @@ func NewApp(version string) *cli.Command {
 			newSetupCmd(appleRT), // setup always runs directly
 			newStartCmd(generalRT),
 			newStopCmd(generalRT),
-			newSystemCmd(generalRT),
+			newSystemCmd(generalRT, appleRT, version),
 			newVolumeCmd(generalRT),
 		},
 	}

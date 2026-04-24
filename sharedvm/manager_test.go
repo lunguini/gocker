@@ -360,8 +360,9 @@ func TestExpandMounts_AlreadyCovered(t *testing.T) {
 
 func TestExpandMounts_ContainersRunning(t *testing.T) {
 	rt := &engine.MockRuntime{
-		ContainerListFunc: func(ctx context.Context, all bool) ([]engine.ContainerInfo, error) {
-			return []engine.ContainerInfo{{ID: "web", Name: "web", Status: "running"}}, nil
+		ExecFunc: func(ctx context.Context, args ...string) ([]byte, []byte, error) {
+			// Simulate `container exec <vm> nerdctl ps -q` returning one container.
+			return []byte("abc123\n"), nil, nil
 		},
 	}
 	m := newTestManager(rt)
@@ -371,7 +372,7 @@ func TestExpandMounts_ContainersRunning(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected error when containers are running")
 	}
-	if !strings.Contains(err.Error(), "containers are running") {
+	if !strings.Contains(err.Error(), "running in the shared VM") {
 		t.Errorf("expected error about running containers, got: %v", err)
 	}
 }

@@ -163,7 +163,7 @@ func buildTestRoot(t *testing.T) *cli.Command {
 			newExecCmd(mock),
 			newImageCmd(mock),
 			newImagesCmd(mock),
-			newInfoCmd(mock),
+			newInfoCmd(mock, mock, "test"),
 			newInspectCmd(mock),
 			newLogsCmd(mock),
 			newNetworkCmd(mock),
@@ -177,7 +177,7 @@ func buildTestRoot(t *testing.T) *cli.Command {
 			newSetupCmd(mock),
 			newStartCmd(mock),
 			newStopCmd(mock),
-			newSystemCmd(mock),
+			newSystemCmd(mock, mock, "test"),
 			newVolumeCmd(mock),
 		},
 	}
