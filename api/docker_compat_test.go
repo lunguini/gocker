@@ -1,8 +1,11 @@
 package api
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
+	"io"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -433,6 +436,85 @@ func TestDockerCompat_ContainerCreate_PassesExplicitNetworkMode(t *testing.T) {
 	}
 	if !found {
 		t.Errorf("explicit network mode 'my-net' not forwarded: %v", capturedArgs)
+	}
+}
+
+func TestDockerCompat_ExecStart_HijackedStream(t *testing.T) {
+	// Docker CLI's `docker exec` sends `POST /exec/{id}/start` with
+	// `Upgrade: tcp` and expects a 101 Switching Protocols response
+	// followed by the raw stdout stream framed with an 8-byte header.
+	// Previously gocker returned 200 with the output inline, so the CLI
+	// errored with `unable to upgrade to tcp, received 200` and the exit
+	// code was wrong.
+	//
+	// Test strategy: hijack requires a real net.Conn, so run the full
+	// Server on an in-memory net pipe, have a client POST the exec-start
+	// request, and assert on the raw response bytes.
+
+	srv := NewServer(&stubRuntime{
+		execStream: func(ctx context.Context, args ...string) (io.ReadCloser, error) {
+			// Simulate the command "echo hi" by returning hi+newline.
+			return io.NopCloser(strings.NewReader("hi\n")), nil
+		},
+	}, "")
+
+	// Register an exec entry so /exec/{id}/start finds it.
+	execStore.Store("exec-regression", execEntry{
+		containerID: "ctr",
+		config:      ExecConfig{AttachStdout: true, Cmd: []string{"echo", "hi"}},
+	})
+
+	l, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = l.Close() }()
+
+	httpSrv := &http.Server{Handler: srv.mux, ReadHeaderTimeout: 2 * time.Second}
+	go func() { _ = httpSrv.Serve(l) }()
+	defer func() { _ = httpSrv.Shutdown(context.Background()) }()
+
+	// Raw TCP request so we can read the exact response bytes.
+	conn, err := net.Dial("tcp", l.Addr().String())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = conn.Close() }()
+
+	req := "POST /exec/exec-regression/start HTTP/1.1\r\n" +
+		"Host: localhost\r\n" +
+		"Upgrade: tcp\r\n" +
+		"Connection: Upgrade\r\n" +
+		"Content-Length: 0\r\n" +
+		"\r\n"
+	if _, err := conn.Write([]byte(req)); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := conn.SetReadDeadline(time.Now().Add(3 * time.Second)); err != nil {
+		t.Fatal(err)
+	}
+
+	buf := make([]byte, 4096)
+	n, err := conn.Read(buf)
+	if err != nil && err != io.EOF {
+		t.Fatalf("read: %v", err)
+	}
+	body := string(buf[:n])
+
+	// Assert on the status line the CLI checks for.
+	if !strings.HasPrefix(body, "HTTP/1.1 101 ") {
+		t.Errorf("expected 101 Switching Protocols, got:\n%s", body)
+	}
+	// Content-Type must signal the raw-stream protocol.
+	if !strings.Contains(body, "application/vnd.docker.raw-stream") {
+		t.Errorf("expected application/vnd.docker.raw-stream content type; got:\n%s", body)
+	}
+	// The 3-byte "hi\n" payload should appear framed: 8-byte header
+	// then 3 bytes of data. Look for the header pattern 01 00 00 00 00 00 00 03.
+	frame := []byte{1, 0, 0, 0, 0, 0, 0, 3, 'h', 'i', '\n'}
+	if !bytes.Contains(buf[:n], frame) {
+		t.Errorf("expected framed stdout payload for 'hi\\n', got raw bytes:\n%x", buf[:n])
 	}
 }
 

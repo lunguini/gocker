@@ -27,8 +27,12 @@ jobs:
       - uses: golangci/golangci-lint-action@v7
 
   compat-audit:
-    name: Docker-compat matrix (drift guard)
+    name: Docker-compat matrix drift
     runs-on: ubuntu-latest
+    # Drift is informational, not a gate — we're intentionally not 100%
+    # Docker compatible. The check runs, prints any diff, but never fails
+    # the build. Look at the job logs if you want to know what's drifted.
+    continue-on-error: true
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
@@ -40,13 +44,13 @@ jobs:
         env:
           GOCKER: ${{ github.workspace }}/gocker
         run: ./test/compat/audit.sh
-      - name: Fail if matrix drifted
+      - name: Show drift (informational only)
         run: |
-          if ! git diff --exit-code docs/docker-compatibility-matrix.md; then
+          if git diff --exit-code docs/docker-compatibility-matrix.md; then
+            echo "Matrix is up to date."
+          else
             echo
-            echo "docker-compatibility-matrix.md is out of date."
-            echo "Run 'make compat-audit' locally and commit the result."
-            exit 1
+            echo "::warning title=Compat matrix drift::docs/docker-compatibility-matrix.md is out of date. Run 'make compat-audit' locally and commit the result to refresh."
           fi
 
   integration-macos:

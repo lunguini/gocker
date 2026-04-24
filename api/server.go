@@ -54,6 +54,7 @@ func (s *Server) registerRoutes() {
 	s.mux.HandleFunc("GET /containers/{id}/logs", s.handleContainerLogs)
 	s.mux.HandleFunc("POST /containers/{id}/exec", s.handleExecCreate)
 	s.mux.HandleFunc("POST /exec/{id}/start", s.handleExecStart)
+	s.mux.HandleFunc("GET /exec/{id}/json", s.handleExecInspect)
 
 	// Images
 	s.mux.HandleFunc("GET /images/json", s.handleImageList)

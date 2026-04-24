@@ -3,6 +3,7 @@ package api
 import (
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"sync"
 	"sync/atomic"
@@ -260,20 +261,159 @@ func (s *Server) handleExecStart(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	entry := val.(execEntry)
-	execStore.Delete(id)
+	// Mark the exec as running so /exec/{id}/json reports a sensible shape
+	// mid-flight if the Docker CLI inspects before the stream finishes.
+	entry.running = true
+	execStore.Store(id, entry)
+	// When the handler returns, persist the final state (running=false,
+	// exit code) so /exec/{id}/json can answer correctly.
+	defer func() {
+		execStore.Store(id, entry)
+	}()
 
-	stdout, _, err := s.eng.Exec(r.Context(), append([]string{"exec", entry.containerID}, entry.config.Cmd...)...)
-	if err != nil {
-		writeError(w, http.StatusInternalServerError, err.Error())
+	// Parse start-time request. Detach=true is a fire-and-forget; all other
+	// shapes require a hijacked bidirectional stream (Docker CLI upgrades
+	// from HTTP to a raw TCP stream).
+	var req ExecStartRequest
+	_ = json.NewDecoder(r.Body).Decode(&req)
+	// Tty can be set at create OR start time; the start value wins if present.
+	tty := entry.config.Tty || req.Tty
+
+	if req.Detach {
+		// Non-interactive background run — collect output, discard, return 200.
+		_, _, err := s.eng.Exec(r.Context(), append([]string{"exec", entry.containerID}, entry.config.Cmd...)...)
+		entry.running = false
+		if err != nil {
+			entry.exitCode = 1
+			writeError(w, http.StatusInternalServerError, err.Error())
+			return
+		}
+		entry.exitCode = 0
+		w.WriteHeader(http.StatusOK)
 		return
 	}
-	w.Header().Set("Content-Type", "application/octet-stream")
-	_, _ = w.Write(stdout)
+
+	// Hijack the connection so we can write a raw bidirectional stream.
+	// ResponseController follows Unwrap() on wrapped writers (our logging
+	// middleware wraps every response) so hijacking still works.
+	conn, buf, err := http.NewResponseController(w).Hijack()
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "hijack: "+err.Error())
+		return
+	}
+	defer func() { _ = conn.Close() }()
+
+	// Docker CLI sends 'Upgrade: tcp' and expects a 101 Switching Protocols
+	// response before switching to the raw stream. Dockerd's message is
+	// literally "UPGRADED"; matching that keeps the CLI happy.
+	if _, err := fmt.Fprintf(buf, "HTTP/1.1 101 UPGRADED\r\nContent-Type: application/vnd.docker.raw-stream\r\nConnection: Upgrade\r\nUpgrade: tcp\r\n\r\n"); err != nil {
+		return
+	}
+	_ = buf.Flush()
+
+	stream, err := s.eng.ExecStream(r.Context(), append([]string{"exec", entry.containerID}, entry.config.Cmd...)...)
+	if err != nil {
+		// Can't write an error cleanly at this point (101 already flushed).
+		// Just close the connection and mark as failed.
+		entry.running = false
+		entry.exitCode = 1
+		return
+	}
+
+	if tty {
+		// TTY mode: stdout/stderr merged, pass bytes through raw.
+		_, _ = io.Copy(conn, stream)
+	} else {
+		// Non-TTY multiplex: 8-byte frame header per chunk.
+		//   [0]     = stream type (1=stdout, 2=stderr). We only have stdout
+		//             since ExecStream merges stderr into the server's stderr.
+		//   [1-3]   = reserved zeros
+		//   [4-7]   = big-endian uint32 payload size
+		writeFramedChunks(conn, stream)
+	}
+
+	// Close() waits for the command to finish and returns its exit error.
+	// We capture the exit code so /exec/{id}/json can report it to clients
+	// that check `docker exec`'s exit status (most of them do).
+	closeErr := stream.Close()
+	entry.running = false
+	entry.exitCode = exitCodeFromError(closeErr)
+}
+
+// exitCodeFromError extracts a shell-style exit code from exec.Cmd.Wait()'s
+// error. nil → 0. *exec.ExitError → its ExitCode(). Anything else (e.g.
+// context cancellation, pipe failure) → 1.
+func exitCodeFromError(err error) int {
+	if err == nil {
+		return 0
+	}
+	type exitCoder interface{ ExitCode() int }
+	if ec, ok := err.(exitCoder); ok {
+		return ec.ExitCode()
+	}
+	return 1
+}
+
+// handleExecInspect implements GET /exec/{id}/json. Docker CLI calls it
+// after the stream finishes to report the command's exit code. The shape
+// mirrors docker's types.ContainerExecInspect.
+func (s *Server) handleExecInspect(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+	val, ok := execStore.Load(id)
+	if !ok {
+		writeError(w, http.StatusNotFound, "exec not found")
+		return
+	}
+	entry := val.(execEntry)
+	writeJSON(w, http.StatusOK, map[string]any{
+		"ID":            id,
+		"ExecID":        id,
+		"ContainerID":   entry.containerID,
+		"Running":       entry.running,
+		"ExitCode":      entry.exitCode,
+		"ProcessConfig": map[string]any{},
+		"OpenStdin":     entry.config.AttachStdin,
+		"OpenStdout":    entry.config.AttachStdout,
+		"OpenStderr":    entry.config.AttachStderr,
+		"CanRemove":     !entry.running,
+	})
+}
+
+// writeFramedChunks reads from src in 4KB chunks and writes Docker's 8-byte
+// multiplex frame header followed by the payload. All output is tagged as
+// stdout (stream type 1) because our ExecStream doesn't split stderr today.
+func writeFramedChunks(dst io.Writer, src io.Reader) {
+	buf := make([]byte, 4096)
+	header := make([]byte, 8)
+	for {
+		n, err := src.Read(buf)
+		if n > 0 {
+			header[0] = 1 // stdout
+			header[1] = 0
+			header[2] = 0
+			header[3] = 0
+			header[4] = byte(n >> 24)
+			header[5] = byte(n >> 16)
+			header[6] = byte(n >> 8)
+			header[7] = byte(n)
+			if _, werr := dst.Write(header); werr != nil {
+				return
+			}
+			if _, werr := dst.Write(buf[:n]); werr != nil {
+				return
+			}
+		}
+		if err != nil {
+			return
+		}
+	}
 }
 
 type execEntry struct {
 	containerID string
 	config      ExecConfig
+	running     bool
+	exitCode    int
 }
 
 func getString(m map[string]any, keys ...string) string {
