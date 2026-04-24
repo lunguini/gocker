@@ -62,6 +62,56 @@ func TestParseChoice(t *testing.T) {
 	}
 }
 
+func TestIsQuitInput(t *testing.T) {
+	quit := []string{
+		"q", "Q", "quit", "QUIT", "exit", "Exit",
+		"\x1b",       // bare Esc then Enter
+		"\x1b\x1b",   // Meta-Esc variant some terminals send
+		" q ",        // with whitespace
+		"\t\x1b\n",   // extra whitespace + Esc (trim-space will remove the \n,
+		              // actually readLine already strips the \n; this checks robustness)
+	}
+	for _, s := range quit {
+		if !isQuitInput(s) {
+			t.Errorf("isQuitInput(%q) = false, want true", s)
+		}
+	}
+	notQuit := []string{
+		"", "y", "n", "yes", "shared", "\x1b[A", "\x1b[B", "quitx", "xq",
+	}
+	for _, s := range notQuit {
+		if isQuitInput(s) {
+			t.Errorf("isQuitInput(%q) = true, want false", s)
+		}
+	}
+}
+
+func TestParseConfirm_QuitCallsQuitFn(t *testing.T) {
+	// Swap quitFn for a test hook so we can verify it's invoked without
+	// actually os.Exit'ing the test process.
+	called := false
+	orig := quitFn
+	quitFn = func() { called = true }
+	defer func() { quitFn = orig }()
+
+	_ = parseConfirm(strings.NewReader("q\n"), false)
+	if !called {
+		t.Error("parseConfirm on 'q' input did not call quitFn")
+	}
+}
+
+func TestParseChoice_QuitCallsQuitFn(t *testing.T) {
+	called := false
+	orig := quitFn
+	quitFn = func() { called = true }
+	defer func() { quitFn = orig }()
+
+	_ = parseChoice(strings.NewReader("\x1b\n"), []string{"a", "b"}, "a")
+	if !called {
+		t.Error("parseChoice on Esc input did not call quitFn")
+	}
+}
+
 func TestReadLine_CRLF(t *testing.T) {
 	// Two lines separated by CRLF — make sure the CR and LF are consumed
 	// as a single line terminator (not as an empty second line). Must

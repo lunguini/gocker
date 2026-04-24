@@ -24,6 +24,7 @@ func RunWizard(ctx context.Context, opts Options) error {
 	// stty sane is the belt-and-suspenders fix; no-op when stdin isn't a TTY.
 	if interactive {
 		NormalizeTerminal()
+		fmt.Println("Configure gocker. Press Enter to accept the default, or type 'q' / 'quit' / Esc+Enter to cancel.")
 	}
 	existing := config.Load()
 

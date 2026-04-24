@@ -40,6 +40,31 @@ func NormalizeTerminal() {
 	_ = cmd.Run()
 }
 
+// quitFn is called when the user requests to abort the wizard. Overridable
+// for tests so the process doesn't actually die mid-test.
+var quitFn = func() {
+	fmt.Fprintln(os.Stderr, "\nSetup cancelled.")
+	os.Exit(0)
+}
+
+// isQuitInput detects "I want to bail on this wizard" from a line of input.
+// Matches: "q", "quit", "exit" (case-insensitive), or a bare Esc keypress
+// (represented as one or more ESC bytes before Enter — terminals send
+// '\x1b' when Esc is pressed alone, and may send '\x1b\x1b' on some Meta
+// bindings). Arrow keys send '\x1b[A' etc., which this check correctly
+// ignores because the trimmed string has trailing non-ESC bytes.
+func isQuitInput(s string) bool {
+	s = strings.TrimSpace(s)
+	switch strings.ToLower(s) {
+	case "q", "quit", "exit":
+		return true
+	}
+	if s != "" && strings.TrimLeft(s, "\x1b") == "" {
+		return true
+	}
+	return false
+}
+
 // readLine reads from r until it sees '\n' or '\r', returns the line with
 // the terminator stripped. Works in both canonical-mode terminals (where
 // Enter sends '\n') and raw-mode terminals (where Enter sends '\r'). If
@@ -82,7 +107,12 @@ func Confirm(prompt string, def bool) bool {
 }
 
 func parseConfirm(r io.Reader, def bool) bool {
-	s := strings.ToLower(strings.TrimSpace(readLine(r)))
+	line := readLine(r)
+	if isQuitInput(line) {
+		quitFn()
+		return def
+	}
+	s := strings.ToLower(strings.TrimSpace(line))
 	switch s {
 	case "y", "yes":
 		return true
@@ -110,7 +140,12 @@ func Choose(prompt string, options []string, def string) string {
 }
 
 func parseChoice(r io.Reader, options []string, def string) string {
-	s := strings.TrimSpace(readLine(r))
+	line := readLine(r)
+	if isQuitInput(line) {
+		quitFn()
+		return def
+	}
+	s := strings.TrimSpace(line)
 	if s == "" {
 		return def
 	}
@@ -128,7 +163,12 @@ func parseChoice(r io.Reader, options []string, def string) string {
 // Input prompts for a free-text string, returning def if empty.
 func Input(prompt, def string) string {
 	fmt.Printf("%s [default: %s]: ", prompt, def)
-	s := strings.TrimSpace(readLine(stdinReader))
+	line := readLine(stdinReader)
+	if isQuitInput(line) {
+		quitFn()
+		return def
+	}
+	s := strings.TrimSpace(line)
 	if s == "" {
 		return def
 	}
