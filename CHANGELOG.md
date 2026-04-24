@@ -1,5 +1,10 @@
 # Changelog
 
+## v0.7.4
+
+- feat(api): implement exec HTTP hijack + /exec/{id}/json; compat-audit non-blocking
+- docs: update CHANGELOG.md for v0.7.3
+
 ## v0.7.3
 
 - fix(prune): populate network name/id fallback, widen in-use error filter
