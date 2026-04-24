@@ -4,9 +4,10 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"os"
 	"strings"
 
-	"os"
+	"golang.org/x/term"
 
 	"github.com/lunguini/gocker/engine"
 )
@@ -368,15 +369,31 @@ func (s *SharedVMRuntime) VolumeInspect(ctx context.Context, name string) ([]byt
 // --- Helpers ---
 
 // proxyArgs builds the full arg list for proxying a gocker command into the shared VM.
-// Result: ["exec", [-it], "gocker-shared", "gocker", ...gockerArgs]
+// Result: ["exec", [-i|-it], "gocker-shared", "gocker", ...gockerArgs]
+//
+// Apple's `container exec -t` fails with POSIX errno 19 ("Operation not
+// supported by device") when stdin isn't a real terminal — which is every
+// API-daemon call, piped CLI call, or CI invocation. Add -t only when the
+// caller actually has a TTY; otherwise -i alone carries interactive semantics
+// (stdin open for streaming) without the PTY allocation that breaks.
 func (s *SharedVMRuntime) proxyArgs(interactive bool, gockerArgs ...string) []string {
 	args := []string{"exec"}
 	if interactive {
-		args = append(args, "-i", "-t")
+		args = append(args, "-i")
+		if stdinIsTTY() {
+			args = append(args, "-t")
+		}
 	}
 	args = append(args, s.manager.Name(), "gocker")
 	args = append(args, gockerArgs...)
 	return args
+}
+
+// stdinIsTTY reports whether stdin is an actual terminal. os.ModeCharDevice
+// alone is insufficient — it also matches /dev/null and other character
+// devices. Apple's `container exec -t` only works against a real pty.
+func stdinIsTTY() bool {
+	return term.IsTerminal(int(os.Stdin.Fd()))
 }
 
 // proxySimple runs a simple gocker command in the VM and returns any error.

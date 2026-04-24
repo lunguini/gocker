@@ -30,7 +30,7 @@ func newRunCmd(eng engine.Runtime) *cli.Command {
 			&cli.StringFlag{Name: "platform", Usage: "Set platform (e.g., linux/amd64)"},
 			&cli.StringFlag{Name: "restart", Usage: "Restart policy (no, always, on-failure, unless-stopped)"},
 			&cli.StringFlag{Name: "hostname", Aliases: []string{"h"}, Usage: "Container hostname"},
-			&cli.StringFlag{Name: "cpus", Aliases: []string{"c"}, Usage: "Number of CPUs"},
+			&cli.StringFlag{Name: "cpus", Usage: "Number of CPUs"},
 			&cli.StringFlag{Name: "memory", Aliases: []string{"m"}, Usage: "Memory limit"},
 		},
 		Action: func(ctx context.Context, cmd *cli.Command) error {

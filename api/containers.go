@@ -97,7 +97,16 @@ func (s *Server) handleContainerCreate(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	args = append(args, req.Image)
-	args = append(args, req.Cmd...)
+	// Guard the user's Cmd against flag reparsing in downstream CLIs. The
+	// inner `gocker run` (or nerdctl) consumes this arg list; if Cmd begins
+	// with or contains things like '-c' (literally the Docker API convention
+	// for `sh -c '...'`), a flag parser will happily steal it. Docker's own
+	// CLI stops at the image positional; we can't count on urfave/cli doing
+	// the same, so emit an explicit `--` separator.
+	if len(req.Cmd) > 0 {
+		args = append(args, "--")
+		args = append(args, req.Cmd...)
+	}
 
 	if err := s.eng.ContainerRun(r.Context(), args, false); err != nil {
 		writeError(w, http.StatusInternalServerError, err.Error())

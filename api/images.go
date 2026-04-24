@@ -55,6 +55,42 @@ func (s *Server) handleImagePull(w http.ResponseWriter, r *http.Request) {
 	_, _ = fmt.Fprintf(w, `{"status":"Downloaded newer image for %s"}`, image)
 }
 
+// imageRefMatches reports whether img matches the reference string ref.
+// Docker clients send a mix of forms for the same image — short
+// ("alpine:3"), repository-only ("nginx"), fully qualified with a default
+// registry ("docker.io/library/alpine:3"), or by ID prefix — and expect
+// all to resolve. Our in-VM parser currently flattens Name to the short
+// form, so we have to both strip a qualified ref down to the short form
+// and expand a short Name up to the qualified form when matching.
+func imageRefMatches(img engine.ImageInfo, ref string) bool {
+	full := img.Name + ":" + img.Tag
+	if ref == img.ID || ref == img.Name || ref == full {
+		return true
+	}
+	candidates := []string{img.Name, full}
+	// Expand a short name to its docker.io/library/* equivalent so
+	// "alpine" (as stored) matches "docker.io/library/alpine:3" (requested).
+	if !strings.Contains(img.Name, "/") {
+		candidates = append(candidates,
+			"docker.io/library/"+img.Name,
+			"docker.io/library/"+img.Name+":"+img.Tag,
+		)
+	}
+	// Also contract the stored Name (e.g. "docker.io/library/alpine") down
+	// to the short form so the reverse case works.
+	for _, prefix := range []string{"docker.io/library/", "docker.io/"} {
+		if short := strings.TrimPrefix(img.Name, prefix); short != img.Name {
+			candidates = append(candidates, short, short+":"+img.Tag)
+		}
+	}
+	for _, c := range candidates {
+		if ref == c {
+			return true
+		}
+	}
+	return false
+}
+
 func (s *Server) handleImageRemove(w http.ResponseWriter, r *http.Request) {
 	name := r.PathValue("name")
 	if err := s.eng.ImageRemove(r.Context(), name); err != nil {
@@ -81,11 +117,10 @@ func (s *Server) handleImageInspect(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	for _, img := range images {
-		fullName := img.Name + ":" + img.Tag
-		if img.Name == name || fullName == name || img.ID == name {
+		if imageRefMatches(img, name) {
 			resp := map[string]any{
 				"Id":       img.ID,
-				"RepoTags": []string{fullName},
+				"RepoTags": []string{img.Name + ":" + img.Tag},
 				"Created":  img.Created.UTC().Format("2006-01-02T15:04:05Z"),
 				"Size":     0,
 			}

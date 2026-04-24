@@ -279,11 +279,31 @@ func ParseNerdctlImageList(data []byte) ([]ImageInfo, error) {
 
 	var result []ImageInfo
 	for _, obj := range objects {
+		// nerdctl's `images --format json` emits both Repository (short:
+		// "nginx") and Name (fully qualified: "docker.io/library/nginx:alpine").
+		// Docker API clients and compose look up images by the fully
+		// qualified form, so prefer Name — otherwise /images/{name}/json
+		// returns 404 for perfectly pulled images and compose bails with
+		// "image not found".
 		info := ImageInfo{
 			ID:   getString(obj, "ID", "id"),
-			Name: getString(obj, "Repository", "repository", "Name", "name"),
 			Tag:  getString(obj, "Tag", "tag"),
 			Size: getString(obj, "Size", "size"),
+		}
+		if full := getString(obj, "Name", "name"); full != "" {
+			// Strip the trailing :tag (if any) so Name holds just the repo
+			// path and Tag stays consistent with the dedicated field.
+			if i := strings.LastIndex(full, ":"); i > strings.LastIndex(full, "/") {
+				info.Name = full[:i]
+				if info.Tag == "" {
+					info.Tag = full[i+1:]
+				}
+			} else {
+				info.Name = full
+			}
+		}
+		if info.Name == "" {
+			info.Name = getString(obj, "Repository", "repository")
 		}
 		if info.ID == "" {
 			info.ID = getString(obj, "Digest", "digest")
