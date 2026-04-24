@@ -80,13 +80,32 @@ func (n *NerdctlRuntime) ContainerRun(ctx context.Context, args []string, intera
 	}
 	stdout, stderr, err := n.Exec(ctx, cmdArgs...)
 	if err != nil {
-		return fmt.Errorf("%s: %w", strings.TrimSpace(string(stderr)), err)
+		return wrapRunErr("nerdctl run", cmdArgs, stdout, stderr, err)
 	}
 	out := strings.TrimSpace(string(stdout))
 	if out != "" {
 		fmt.Println(out)
 	}
 	return nil
+}
+
+// wrapRunErr produces a useful error message when a shell-out fails. The
+// previous formulation — fmt.Errorf("%s: %w", stderr, err) — degenerates to
+// a bare ": exit status 1" when the underlying CLI writes nothing to stderr
+// (which happens when it crashes, is killed, or writes to stdout instead).
+// Clients like Docker Compose surface that as "Error response from daemon:
+// exit status 1", hiding the actual failure. Fall back to stdout, then to
+// the command line itself, so the API consumer always has something to go
+// on.
+func wrapRunErr(label string, args []string, stdout, stderr []byte, err error) error {
+	msg := strings.TrimSpace(string(stderr))
+	if msg == "" {
+		msg = strings.TrimSpace(string(stdout))
+	}
+	if msg == "" {
+		msg = fmt.Sprintf("%s %s", label, strings.Join(args, " "))
+	}
+	return fmt.Errorf("%s: %w", msg, err)
 }
 
 func (n *NerdctlRuntime) ContainerList(ctx context.Context, all bool) ([]ContainerInfo, error) {
