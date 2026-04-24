@@ -4,6 +4,7 @@ go 1.26.1
 
 require (
 	github.com/docker/docker v26.1.5+incompatible
+	github.com/docker/go-connections v0.7.0
 	github.com/urfave/cli/v3 v3.8.0
 	golang.org/x/sys v0.43.0
 	golang.org/x/term v0.42.0
@@ -11,7 +12,6 @@ require (
 )
 
 require (
-	github.com/docker/go-connections v0.7.0 // indirect
 	github.com/docker/go-units v0.5.0 // indirect
 	github.com/gogo/protobuf v1.3.2 // indirect
 	github.com/moby/docker-image-spec v1.3.1 // indirect

@@ -39,50 +39,14 @@ func (s *Server) handleNetworkInspect(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusNotFound, err.Error())
 		return
 	}
-
-	// Apple CLI returns a JSON array with lowercase field names; Docker's SDK
-	// expects a single object with capitalized fields.
-	var raw map[string]any
-	if err := json.Unmarshal(data, &raw); err != nil {
-		var arr []map[string]any
-		if arrErr := json.Unmarshal(data, &arr); arrErr == nil {
-			if len(arr) == 0 {
-				writeError(w, http.StatusNotFound, "No such network: "+id)
-				return
-			}
-			raw = arr[0]
-		} else {
-			writeError(w, http.StatusInternalServerError, "failed to parse inspect data")
-			return
-		}
+	// Reshape into the real Docker SDK NetworkResource with every
+	// map/slice/field guaranteed non-nil. See api/inspect.go.
+	n, err := reshapeNetworkInspect(data, id)
+	if err != nil {
+		writeError(w, http.StatusNotFound, "No such network: "+id)
+		return
 	}
-
-	name := getString(raw, "name", "Name")
-	resp := map[string]any{
-		"Id":         getString(raw, "id", "ID", "Id"),
-		"Name":       name,
-		"Scope":      getString(raw, "scope", "Scope"),
-		"Driver":     getString(raw, "driver", "Driver"),
-		"EnableIPv6": false,
-		"Internal":   false,
-		"Attachable": false,
-		"Ingress":    false,
-		"IPAM": map[string]any{
-			"Driver":  "default",
-			"Options": map[string]string{},
-			"Config":  []any{},
-		},
-		"ConfigFrom": map[string]any{"Network": ""},
-		"ConfigOnly": false,
-		"Containers": map[string]any{},
-		"Options":    extractStringMap(raw, "options", "Options"),
-		// Labels must be passed through — Docker Compose reads
-		// com.docker.compose.project off them to decide "is this mine".
-		// Returning an empty map causes compose to reject its OWN networks
-		// with "not created by Docker Compose" on every up.
-		"Labels": extractLabels(raw),
-	}
-	writeJSON(w, http.StatusOK, resp)
+	writeJSON(w, http.StatusOK, n)
 }
 
 func (s *Server) handleNetworkCreate(w http.ResponseWriter, r *http.Request) {

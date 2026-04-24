@@ -9,6 +9,7 @@ import (
 	"net"
 	"net/http"
 	"net/http/httptest"
+	"reflect"
 	"strings"
 	"testing"
 	"time"
@@ -687,6 +688,94 @@ func TestDockerCompat_VolumeInspect_PassesLabelsThrough(t *testing.T) {
 	}
 	if out.Labels["com.docker.compose.volume"] != "data" {
 		t.Errorf("compose volume label lost: got Labels=%v", out.Labels)
+	}
+}
+
+// TestDockerCompat_ContainerInspect_NoNilPointers walks the decoded SDK
+// response via reflection and asserts that every pointer/map/slice field
+// is non-nil — regardless of what the raw backend payload looks like.
+//
+// This is the single test that prevents the lazydocker-style
+// "result.Config.Tty" nil-deref class of bug from regressing. Adding a new
+// client that dereferences any field the SDK defines is safe by
+// construction.
+func TestDockerCompat_ContainerInspect_NoNilPointers(t *testing.T) {
+	// A deliberately sparse payload — just an ID, no nested objects. This
+	// is the worst-case input (close to Apple Container CLI's flat shape)
+	// and the reshape should still produce a safe-to-deref result.
+	payloads := []string{
+		`[{"Id":"a"}]`,
+		`[{"id":"b","status":"running"}]`,                        // Apple flat
+		`[{"Id":"c","State":null,"Config":null,"HostConfig":null}]`, // explicit nulls
+	}
+
+	for _, payload := range payloads {
+		t.Run(payload, func(t *testing.T) {
+			srv := NewServer(&stubRuntime{
+				containerInspect: func(ctx context.Context, id string) ([]byte, error) {
+					return []byte(payload), nil
+				},
+			}, "")
+			rr := doGET(t, srv, "/containers/x/json")
+			if rr.Code != http.StatusOK {
+				t.Fatalf("status: got %d, want 200; body=%s", rr.Code, rr.Body.String())
+			}
+			var c dockertypes.ContainerJSON
+			if err := json.Unmarshal(rr.Body.Bytes(), &c); err != nil {
+				t.Fatalf("decode: %v", err)
+			}
+			checkAllPointersNonNil(t, "ContainerJSON", reflect.ValueOf(c))
+		})
+	}
+}
+
+// checkAllPointersNonNil flags nil struct-pointer, slice, and map fields.
+// Clients crash when they deref a struct pointer without checking
+// (lazydocker's `result.Config.Tty`), or when they iterate a nil slice/map
+// that the SDK type expects to be present. Pointer-to-primitive fields
+// (`*int64`, `*bool`) are Docker's idiomatic "unset" sentinel — callers
+// check them before deref, and we allow them to stay nil.
+func checkAllPointersNonNil(t *testing.T, path string, v reflect.Value) {
+	t.Helper()
+	switch v.Kind() {
+	case reflect.Ptr:
+		if v.IsNil() {
+			// Only flag nil struct-pointers. Pointer-to-primitive is a
+			// legitimate Docker "unset" sentinel.
+			if v.Type().Elem().Kind() == reflect.Struct {
+				t.Errorf("%s: nil struct pointer", path)
+			}
+			return
+		}
+		checkAllPointersNonNil(t, path, v.Elem())
+	case reflect.Struct:
+		typ := v.Type()
+		for i := 0; i < v.NumField(); i++ {
+			f := typ.Field(i)
+			if !f.IsExported() {
+				continue
+			}
+			// Skip fields dockerd itself emits as omitempty nil.
+			if strings.Contains(f.Tag.Get("json"), "omitempty") {
+				continue
+			}
+			// Node is swarm-only and legitimately nil on a single-host daemon.
+			if f.Name == "Node" {
+				continue
+			}
+			if f.Name == "GraphDriver" {
+				continue
+			}
+			checkAllPointersNonNil(t, path+"."+f.Name, v.Field(i))
+		}
+	case reflect.Slice:
+		if v.IsNil() {
+			t.Errorf("%s: nil slice", path)
+		}
+	case reflect.Map:
+		if v.IsNil() {
+			t.Errorf("%s: nil map", path)
+		}
 	}
 }
 

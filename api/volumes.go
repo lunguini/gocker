@@ -59,40 +59,12 @@ func (s *Server) handleVolumeInspect(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusNotFound, err.Error())
 		return
 	}
-
-	// Apple CLI may return a JSON array with lowercase field names; Docker's
-	// SDK expects a single object with capitalized fields.
-	var raw map[string]any
-	if err := json.Unmarshal(data, &raw); err != nil {
-		var arr []map[string]any
-		if arrErr := json.Unmarshal(data, &arr); arrErr == nil {
-			if len(arr) == 0 {
-				writeError(w, http.StatusNotFound, "No such volume: "+name)
-				return
-			}
-			raw = arr[0]
-		} else {
-			writeError(w, http.StatusInternalServerError, "failed to parse inspect data")
-			return
-		}
+	// Reshape into the real Docker SDK volume.Volume with every map/field
+	// non-nil. See api/inspect.go.
+	v, err := reshapeVolumeInspect(data, name)
+	if err != nil {
+		writeError(w, http.StatusNotFound, "No such volume: "+name)
+		return
 	}
-
-	resolved := getString(raw, "name", "Name")
-	if resolved == "" {
-		resolved = name
-	}
-	resp := map[string]any{
-		"Name":       resolved,
-		"Driver":     getString(raw, "driver", "Driver"),
-		"Mountpoint": getString(raw, "mountpoint", "Mountpoint", "source", "Source"),
-		"CreatedAt":  getString(raw, "createdAt", "CreatedAt", "created", "Created"),
-		"Scope":      "local",
-		// Labels must be passed through — Docker Compose reads
-		// com.docker.compose.project off them to decide "is this mine".
-		// Returning an empty map causes compose to reject its OWN volumes
-		// with "not created by Docker Compose" on every up.
-		"Labels":  extractLabels(raw),
-		"Options": extractStringMap(raw, "options", "Options"),
-	}
-	writeJSON(w, http.StatusOK, resp)
+	writeJSON(w, http.StatusOK, v)
 }

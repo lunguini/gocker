@@ -159,80 +159,18 @@ func (s *Server) handleContainerInspect(w http.ResponseWriter, r *http.Request) 
 		writeError(w, http.StatusNotFound, err.Error())
 		return
 	}
-
-	// nerdctl inspect output is already Docker-shaped (Config.Env,
-	// Config.Labels, HostConfig.*, Mounts, NetworkSettings, State, etc.).
-	// Apple container CLI's inspect is also close enough that tools accept
-	// it. Pass the raw JSON through with minimal massaging rather than
-	// rebuilding a tiny subset — previously we hardcoded Env: [] and most
-	// Config fields to empty, which broke lazydocker, testcontainers, and
-	// anything else that reads real container metadata.
-	//
-	// Apple CLI returns a JSON array; nerdctl returns either a single
-	// object or an array. Unwrap the first element of an array, but
-	// preserve the full object shape.
-	var obj map[string]any
-	if err := json.Unmarshal(data, &obj); err != nil {
-		var arr []map[string]any
-		if arrErr := json.Unmarshal(data, &arr); arrErr == nil {
-			if len(arr) == 0 {
-				writeError(w, http.StatusNotFound, "No such container: "+id)
-				return
-			}
-			obj = arr[0]
-		} else {
-			writeError(w, http.StatusInternalServerError, "failed to parse inspect data")
-			return
-		}
+	// Reshape into the real Docker SDK ContainerJSON type with every
+	// pointer/slice/map field guaranteed non-nil. See api/inspect.go for
+	// the rationale — we previously did ad-hoc map-patching and kept
+	// missing fields that individual clients dereferenced.
+	c, err := reshapeContainerInspect(data)
+	if err != nil {
+		writeError(w, http.StatusNotFound, "No such container: "+id)
+		return
 	}
-
-	// Normalize the Name field to Docker's leading-slash convention. nerdctl
-	// already emits "/my-container"; Apple CLI emits "my-container". A
-	// leading slash is required by docker clients that do path-style lookups.
-	if name, ok := obj["Name"].(string); ok && name != "" && !strings.HasPrefix(name, "/") {
-		obj["Name"] = "/" + name
-	}
-
-	// Guarantee a State object with at least Status + Running. Docker SDK
-	// decodes State into *ContainerState; if the key is missing or null the
-	// pointer stays nil and clients like lazydocker crash on
-	// `result.State.Running`. Apple Container CLI's flat inspect doesn't
-	// emit State — synthesize one from top-level status when needed.
-	ensureContainerState(obj)
-
-	writeJSON(w, http.StatusOK, obj)
+	writeJSON(w, http.StatusOK, c)
 }
 
-// ensureContainerState makes sure obj["State"] is a map with Status + Running,
-// pulling values from top-level "status"/"Status" when the State object is
-// missing. Non-destructive: if State already exists as a map, only fills in
-// Running when it's absent (some sources only emit Status).
-func ensureContainerState(obj map[string]any) {
-	state, ok := obj["State"].(map[string]any)
-	if !ok {
-		state = map[string]any{}
-	}
-	status, _ := state["Status"].(string)
-	if status == "" {
-		status = getString(obj, "status", "Status")
-		if status != "" {
-			state["Status"] = status
-		}
-	}
-	if _, hasRunning := state["Running"]; !hasRunning {
-		state["Running"] = strings.EqualFold(status, "running")
-	}
-	// Lazydocker and the Docker SDK also read these; zero values are safe.
-	for _, k := range []string{"Paused", "Restarting", "OOMKilled", "Dead"} {
-		if _, present := state[k]; !present {
-			state[k] = false
-		}
-	}
-	if _, present := state["ExitCode"]; !present {
-		state["ExitCode"] = 0
-	}
-	obj["State"] = state
-}
 
 func (s *Server) handleContainerLogs(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
