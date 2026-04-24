@@ -1,0 +1,14 @@
+services:
+  # Hits the image-inspect code path with a qualified name after pull —
+  # exercises imageRefMatches and the nerdctl parser's canonical Name.
+  server:
+    image: docker.io/library/nginx:alpine
+
+  # Cmd begins with the classic `/bin/sh -c '<shell>'` shape. The inner
+  # `-c` must not get eaten as a --cpus flag — proved out by the `--`
+  # separator inserted in handleContainerCreate.
+  client:
+    image: docker.io/library/alpine:3
+    command: ["/bin/sh", "-c", "sleep infinity"]
+    depends_on:
+      - server

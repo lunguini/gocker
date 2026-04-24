@@ -28,7 +28,7 @@ else
 fi
 
 # 2. The 'client' service from the override file actually exists and runs.
-if "$GOCKER" compose -p "$PROJECT" ps 2>/dev/null | grep -qE '\bclient\b'; then
+if compose_cmd -p "$PROJECT" ps 2>/dev/null | grep -qE '\bclient\b'; then
     log_pass "client service from override file is running"
 else
     log_fail "client service from override file is NOT in compose ps"

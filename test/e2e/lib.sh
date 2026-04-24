@@ -18,9 +18,65 @@ log_section() { printf "\n${CYAN}=== %s ===${NC}\n" "$*"; }
 : "${GOCKER:=gocker}"
 
 # COMPOSE_EXTRA holds per-scenario extra args (e.g. `-f a.yml -f b.yml`) that
-# must be prepended to every `gocker compose` invocation. Default empty so
-# scenarios without a compose.args file behave as before.
+# must be prepended to every compose invocation. Default empty so scenarios
+# without a compose.args file behave as before.
 : "${COMPOSE_EXTRA:=}"
+
+# E2E_MODE selects which code path drives compose:
+#   gocker      — (default) `gocker compose ...` → our compose-proxy,
+#                 which shells out to nerdctl inside the shared VM. Tests
+#                 the proxy, arg translation, and per-scenario VM state.
+#   docker-api  — `docker compose ...` with docker context pointing at
+#                 gocker's socket. Tests the Docker-API surface (every
+#                 endpoint compose v2 calls) against gocker's daemon.
+#                 This path caught all four compose regressions on
+#                 2026-04-24 (container-exec -t, image inspect by
+#                 qualified name, -c vs --cpus collision, nerdctl parser).
+: "${E2E_MODE:=gocker}"
+
+# _DOCKER_CTX_SAVED preserves the user's active docker context so we can
+# restore it after the suite. Do not set manually.
+_DOCKER_CTX_SAVED=""
+_DOCKER_CTX_E2E="gocker-e2e"
+
+e2e_setup_mode() {
+    case "$E2E_MODE" in
+        gocker) ;;
+        docker-api)
+            command -v docker >/dev/null || { log_fail "E2E_MODE=docker-api needs the docker CLI on PATH"; exit 2; }
+            local sock="$HOME/.gocker/gocker.sock"
+            [ -S "$sock" ] || { log_fail "gocker.sock not found at $sock — start the daemon with 'gocker daemon start'"; exit 2; }
+            _DOCKER_CTX_SAVED=$(docker context show 2>/dev/null || echo default)
+            if ! docker context inspect "$_DOCKER_CTX_E2E" >/dev/null 2>&1; then
+                docker context create "$_DOCKER_CTX_E2E" --docker "host=unix://$sock" >/dev/null
+            fi
+            docker context use "$_DOCKER_CTX_E2E" >/dev/null
+            log_info "E2E_MODE=docker-api — docker context: $_DOCKER_CTX_E2E (saved: $_DOCKER_CTX_SAVED)"
+            ;;
+        *)
+            log_fail "unknown E2E_MODE=$E2E_MODE (want: gocker | docker-api)"
+            exit 2
+            ;;
+    esac
+}
+
+e2e_teardown_mode() {
+    if [ "$E2E_MODE" = "docker-api" ] && [ -n "$_DOCKER_CTX_SAVED" ]; then
+        docker context use "$_DOCKER_CTX_SAVED" >/dev/null 2>&1 || true
+    fi
+}
+
+# compose_cmd runs the compose CLI appropriate for the current E2E_MODE.
+# It injects COMPOSE_EXTRA automatically so per-scenario flags (-f a.yml
+# -f b.yml, --profile, etc.) don't have to be passed at every call site.
+compose_cmd() {
+    # shellcheck disable=SC2086
+    if [ "$E2E_MODE" = "docker-api" ]; then
+        docker compose $COMPOSE_EXTRA "$@"
+    else
+        "$GOCKER" compose $COMPOSE_EXTRA "$@"
+    fi
+}
 
 # wait_for_healthy waits up to $2 seconds for every service in the current
 # compose project to reach a good state. Requires at least one container to
@@ -39,8 +95,7 @@ wait_for_healthy() {
     local deadline=$(( $(date +%s) + timeout ))
     while [ "$(date +%s)" -lt "$deadline" ]; do
         local ps_out
-        # shellcheck disable=SC2086
-        ps_out=$("$GOCKER" compose -p "$project" $COMPOSE_EXTRA ps --format json 2>/dev/null || true)
+        ps_out=$(compose_cmd -p "$project" ps --format json 2>/dev/null || true)
         # No containers yet — keep waiting.
         if [ -z "$ps_out" ] || [ "$ps_out" = "[]" ] || [ "$ps_out" = "null" ]; then
             sleep 1
@@ -58,8 +113,7 @@ wait_for_healthy() {
         sleep 1
     done
     log_fail "services did not become healthy within ${timeout}s"
-    # shellcheck disable=SC2086
-    "$GOCKER" compose -p "$project" $COMPOSE_EXTRA ps || true
+    compose_cmd -p "$project" ps || true
     return 1
 }
 
@@ -70,12 +124,10 @@ wait_for_healthy() {
 # Usage: retry_exec TIMEOUT PROJECT SERVICE -- cmd args...
 retry_exec() {
     local timeout="$1"; local project="$2"; local service="$3"; shift 3
-    # Drop a leading `--` separator if present.
     if [ "${1:-}" = "--" ]; then shift; fi
     local deadline=$(( $(date +%s) + timeout ))
     while [ "$(date +%s)" -lt "$deadline" ]; do
-        # shellcheck disable=SC2086
-        if "$GOCKER" compose -p "$project" $COMPOSE_EXTRA exec -T "$service" "$@" >/dev/null 2>&1; then
+        if compose_cmd -p "$project" exec -T "$service" "$@" >/dev/null 2>&1; then
             return 0
         fi
         sleep 1
@@ -93,8 +145,7 @@ retry_exec_capture() {
     local deadline=$(( $(date +%s) + timeout ))
     local out rc
     while [ "$(date +%s)" -lt "$deadline" ]; do
-        # shellcheck disable=SC2086
-        out=$("$GOCKER" compose -p "$project" $COMPOSE_EXTRA exec -T "$service" "$@" 2>/dev/null)
+        out=$(compose_cmd -p "$project" exec -T "$service" "$@" 2>/dev/null)
         rc=$?
         if [ "$rc" -eq 0 ]; then
             if [ -z "${RETRY_MATCH:-}" ] || echo "$out" | grep -qE "$RETRY_MATCH"; then
@@ -113,24 +164,22 @@ wait_for_log() {
     local project="$1"; local service="$2"; local pattern="$3"; local timeout="${4:-60}"
     local deadline=$(( $(date +%s) + timeout ))
     while [ "$(date +%s)" -lt "$deadline" ]; do
-        # shellcheck disable=SC2086
-        if "$GOCKER" compose -p "$project" $COMPOSE_EXTRA logs "$service" 2>/dev/null | grep -qE "$pattern"; then
+        if compose_cmd -p "$project" logs "$service" 2>/dev/null | grep -qE "$pattern"; then
             return 0
         fi
         sleep 2
     done
     log_fail "pattern '$pattern' not seen in $service logs within ${timeout}s"
-    # shellcheck disable=SC2086
-    "$GOCKER" compose -p "$project" $COMPOSE_EXTRA logs "$service" | tail -40 || true
+    compose_cmd -p "$project" logs "$service" | tail -40 || true
     return 1
 }
 
-# gocker_exec runs a command inside a compose service via gocker compose exec.
+# gocker_exec runs a command inside a compose service via compose exec.
+# Kept as the legacy name for scenarios; prefer compose_cmd directly.
 # Usage: gocker_exec PROJECT SERVICE -- cmd args...
 gocker_exec() {
     local project="$1"; local service="$2"; shift 2
-    # shellcheck disable=SC2086
-    "$GOCKER" compose -p "$project" $COMPOSE_EXTRA exec -T "$service" "$@"
+    compose_cmd -p "$project" exec -T "$service" "$@"
 }
 
 # assert_clean_state verifies no containers with the project prefix remain

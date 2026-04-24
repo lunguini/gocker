@@ -5,7 +5,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=./lib.sh
 source "$SCRIPT_DIR/lib.sh"
 
-log_section "Gocker E2E — running all scenarios"
+log_section "Gocker E2E — running all scenarios (mode: $E2E_MODE)"
 log_info "using binary: $("$GOCKER" --version 2>&1 | head -1)"
 
 SCENARIOS=()

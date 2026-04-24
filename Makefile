@@ -3,7 +3,7 @@ VERSION := $(shell git describe --tags --always --dirty 2>/dev/null || echo "0.2
 LDFLAGS := -ldflags "-X main.version=$(VERSION)"
 DOCKER_REPO := docker.io/adyjay/gocker
 
-.PHONY: build build-linux install test test-integration test-all lint clean smoke benchmark e2e compat-audit \
+.PHONY: build build-linux install test test-integration test-all lint clean smoke benchmark e2e e2e-docker-api e2e-all compat-audit \
 	template-build-claude template-push-claude \
 	template-build-base template-push-base \
 	template-build template-push
@@ -71,8 +71,13 @@ template-push: template-push-claude template-push-base
 smoke: install
 	@bash test/smoke.sh
 
-e2e:  ## Run end-to-end compose scenarios (requires running shared VM)
+e2e:  ## Run end-to-end compose scenarios via `gocker compose`
 	@./test/e2e/run-all.sh
+
+e2e-docker-api:  ## Run the same scenarios via `docker compose` against gocker.sock (Docker API regression coverage)
+	@E2E_MODE=docker-api ./test/e2e/run-all.sh
+
+e2e-all: e2e e2e-docker-api  ## Run both e2e passes back-to-back
 
 benchmark: install
 	@bash test/benchmark.sh

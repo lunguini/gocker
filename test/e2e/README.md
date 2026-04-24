@@ -1,16 +1,39 @@
 # Gocker E2E Compose Tests
 
-End-to-end scenarios that exercise `gocker compose` against real services.
+End-to-end scenarios that exercise compose against real services. The same
+scenarios run through **two modes** so each invocation path is covered:
+
+- **`gocker`** (default): `gocker compose …` → our compose proxy → nerdctl
+  inside the shared VM. Covers arg translation, mount expansion, per-scenario
+  VM state.
+- **`docker-api`**: `docker compose …` with `docker context` pointing at
+  `~/.gocker/gocker.sock`. Covers the Docker Engine API surface — every
+  endpoint compose v2 hits — against gocker's daemon. This is the path that
+  caught the 2026-04-24 batch of compose regressions (container-exec `-t`
+  on non-TTY, image lookup by qualified name after pull, `-c` vs `--cpus`
+  collision, nerdctl parser flattening `Name`).
 
 ## Running
 
 ```bash
-# All scenarios (5-10 minutes, pulls images from Docker Hub)
+# All scenarios via gocker compose (5-10 min, pulls images from Docker Hub)
 make e2e
 
-# One scenario
+# Same scenarios via docker-api path
+make e2e-docker-api
+
+# Both passes back-to-back
+make e2e-all
+
+# One scenario, one mode
 ./test/e2e/run.sh redis
+E2E_MODE=docker-api ./test/e2e/run.sh redis
 ```
+
+A scenario can opt out of the docker-api pass by dropping a
+`skip-docker-api` file in its dir with a one-line reason. Use sparingly —
+the point of the mode is to surface compose-over-API gaps. If a scenario
+fails, file an issue rather than add it to the skip list.
 
 Requires a working gocker installation with the shared VM already provisioned
 (run `gocker setup` first). If your installed `gocker` is stale, run
@@ -32,6 +55,7 @@ scenarios don't collide with each other or with your normal gocker state.
 | `compose-stack`   | 3-file stack with user-defined network + named volumes; script reads postgres → writes redis → backs up to volume |
 | `canary-wordpress`| Real-world public stack: WordPress + MariaDB. Confirms services boot, WP connects to DB, and HTTP responds with a 200/302 |
 | `canary-immich`   | Real-world public stack: Immich (db+redis+server minimal slice). Confirms the NestJS app bootstraps and connects to db + redis |
+| `docker-api-smoke`| Minimal two-service stack targeting the docker-api mode specifically. Exercises ImagePull via daemon, image inspect by qualified ref, and Cmd that begins with `/bin/sh -c '…'`. |
 
 ## Adding a new scenario
 
