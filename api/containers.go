@@ -193,7 +193,45 @@ func (s *Server) handleContainerInspect(w http.ResponseWriter, r *http.Request) 
 		obj["Name"] = "/" + name
 	}
 
+	// Guarantee a State object with at least Status + Running. Docker SDK
+	// decodes State into *ContainerState; if the key is missing or null the
+	// pointer stays nil and clients like lazydocker crash on
+	// `result.State.Running`. Apple Container CLI's flat inspect doesn't
+	// emit State — synthesize one from top-level status when needed.
+	ensureContainerState(obj)
+
 	writeJSON(w, http.StatusOK, obj)
+}
+
+// ensureContainerState makes sure obj["State"] is a map with Status + Running,
+// pulling values from top-level "status"/"Status" when the State object is
+// missing. Non-destructive: if State already exists as a map, only fills in
+// Running when it's absent (some sources only emit Status).
+func ensureContainerState(obj map[string]any) {
+	state, ok := obj["State"].(map[string]any)
+	if !ok {
+		state = map[string]any{}
+	}
+	status, _ := state["Status"].(string)
+	if status == "" {
+		status = getString(obj, "status", "Status")
+		if status != "" {
+			state["Status"] = status
+		}
+	}
+	if _, hasRunning := state["Running"]; !hasRunning {
+		state["Running"] = strings.EqualFold(status, "running")
+	}
+	// Lazydocker and the Docker SDK also read these; zero values are safe.
+	for _, k := range []string{"Paused", "Restarting", "OOMKilled", "Dead"} {
+		if _, present := state[k]; !present {
+			state[k] = false
+		}
+	}
+	if _, present := state["ExitCode"]; !present {
+		state["ExitCode"] = 0
+	}
+	obj["State"] = state
 }
 
 func (s *Server) handleContainerLogs(w http.ResponseWriter, r *http.Request) {

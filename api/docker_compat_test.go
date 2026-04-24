@@ -690,6 +690,54 @@ func TestDockerCompat_VolumeInspect_PassesLabelsThrough(t *testing.T) {
 	}
 }
 
+func TestDockerCompat_ContainerInspect_AlwaysHasStateObject(t *testing.T) {
+	// Lazydocker (and any Docker SDK client) dereferences result.State.Running
+	// without a nil check. If our inspect response has State missing or null,
+	// the client crashes with "invalid memory address or nil pointer
+	// dereference". Pin that our passthrough always emits a State map.
+	cases := []struct {
+		name    string
+		payload string
+		wantRun bool
+	}{
+		{
+			name:    "payload with no State — synthesized from top-level status",
+			payload: `[{"Id":"a","status":"running"}]`,
+			wantRun: true,
+		},
+		{
+			name:    "payload with State: null",
+			payload: `[{"Id":"a","State":null}]`,
+			wantRun: false,
+		},
+		{
+			name:    "payload with partial State — Running filled in from Status",
+			payload: `[{"Id":"a","State":{"Status":"exited"}}]`,
+			wantRun: false,
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			srv := NewServer(&stubRuntime{
+				containerInspect: func(ctx context.Context, id string) ([]byte, error) {
+					return []byte(tc.payload), nil
+				},
+			}, "")
+			rr := doGET(t, srv, "/containers/a/json")
+			var out dockertypes.ContainerJSON
+			if err := json.Unmarshal(rr.Body.Bytes(), &out); err != nil {
+				t.Fatalf("unmarshal: %v; body=%s", err, rr.Body.String())
+			}
+			if out.State == nil {
+				t.Fatal("State must never be nil — docker clients crash on .Running deref")
+			}
+			if out.State.Running != tc.wantRun {
+				t.Errorf("Running: got %v, want %v", out.State.Running, tc.wantRun)
+			}
+		})
+	}
+}
+
 func TestDockerCompat_Stats_ReturnsValidStatsJSON(t *testing.T) {
 	// lazydocker polls /containers/{id}/stats?stream=1 for CPU/mem. A 404
 	// or malformed response makes the stats panel dead. We stub zero
