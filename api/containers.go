@@ -2,6 +2,7 @@ package api
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -206,6 +207,18 @@ func (s *Server) handleContainerLogs(w http.ResponseWriter, r *http.Request) {
 	// garbage on raw-byte input. Emit framed output by default.
 	w.Header().Set("Content-Type", "application/vnd.docker.raw-stream")
 
+	// If follow=1 on a stopped container, downgrade to non-follow. Docker
+	// clients ask for follow by default but expect it to return and exit
+	// when the container isn't running; our backing `logs --follow` hangs
+	// waiting for new output instead. Crucial for debugging a crash —
+	// lazydocker follow=1 against an exited container otherwise returns
+	// nothing until the 3s curl timeout.
+	if follow {
+		if state, err := s.containerState(r.Context(), id); err == nil && state != "running" {
+			follow = false
+		}
+	}
+
 	if follow {
 		stream, err := s.eng.ExecStream(r.Context(), "logs", id, "--follow")
 		if err != nil {
@@ -224,6 +237,37 @@ func (s *Server) handleContainerLogs(w http.ResponseWriter, r *http.Request) {
 	}
 	// Single-shot response: wrap the whole payload in one frame.
 	writeFramedChunks(w, bytes.NewReader(stdout))
+}
+
+// containerState returns the current state string (e.g. "running",
+// "exited", "stopped") for a container, by reading its inspect payload.
+// Returns an error only on transport/parse failure — unknown state is OK.
+func (s *Server) containerState(ctx context.Context, id string) (string, error) {
+	data, err := s.eng.ContainerInspect(ctx, id)
+	if err != nil {
+		return "", err
+	}
+	var obj map[string]any
+	if err := json.Unmarshal(data, &obj); err != nil {
+		var arr []map[string]any
+		if arrErr := json.Unmarshal(data, &arr); arrErr != nil || len(arr) == 0 {
+			return "", fmt.Errorf("parse inspect: %w", err)
+		}
+		obj = arr[0]
+	}
+	if state, ok := obj["State"].(map[string]any); ok {
+		if s, ok := state["Status"].(string); ok {
+			return strings.ToLower(s), nil
+		}
+	}
+	// Fallback for flat Apple CLI inspects.
+	if s, ok := obj["status"].(string); ok {
+		return strings.ToLower(s), nil
+	}
+	if s, ok := obj["State"].(string); ok {
+		return strings.ToLower(s), nil
+	}
+	return "", nil
 }
 
 func (s *Server) handleExecCreate(w http.ResponseWriter, r *http.Request) {
