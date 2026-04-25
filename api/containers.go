@@ -562,6 +562,9 @@ func streamFramedLogs(w io.Writer, stdout io.ReadCloser, stderr io.ReadCloser, w
 
 	pump := func(src io.ReadCloser, streamType byte, want bool) {
 		defer wg.Done()
+		if src == nil {
+			return
+		}
 		defer func() { _ = src.Close() }()
 		buf := make([]byte, 4096)
 		for {

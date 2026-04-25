@@ -871,12 +871,12 @@ func TestDockerCompat_Logs_EmitsFramedOutput(t *testing.T) {
 	// frame format as /exec/{id}/start. Previously gocker wrote raw bytes
 	// and clients rendered garbage. Assert the frame shape.
 	srv := NewServer(&stubRuntime{
-		exec: func(ctx context.Context, args ...string) ([]byte, []byte, error) {
-			return []byte("hi\n"), nil, nil
+		execStreamSplit: func(ctx context.Context, args ...string) (io.ReadCloser, io.ReadCloser, error) {
+			return io.NopCloser(bytes.NewReader([]byte("hi\n"))), io.NopCloser(bytes.NewReader(nil)), nil
 		},
 	}, "")
 
-	rr := doGET(t, srv, "/containers/ctr/logs")
+	rr := doGET(t, srv, "/containers/ctr/logs?stdout=1&stderr=1")
 	if rr.Code != http.StatusOK {
 		t.Fatalf("status: got %d, want 200", rr.Code)
 	}
