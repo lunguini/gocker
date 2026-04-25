@@ -555,10 +555,12 @@ func (s *Server) handleExecInspect(w http.ResponseWriter, r *http.Request) {
 // command, writing each chunk into the Docker multiplex frame format
 // (header[0]=1 for stdout, 2 for stderr) so clients like lazydocker can
 // demultiplex them. Selectively suppresses streams the client opted out of.
-func streamFramedLogs(w io.Writer, stdout io.ReadCloser, stderr io.ReadCloser, wantStdout, wantStderr bool) {
+func streamFramedLogs(w http.ResponseWriter, stdout io.ReadCloser, stderr io.ReadCloser, wantStdout, wantStderr bool) {
 	var mu sync.Mutex
 	var wg sync.WaitGroup
-	flusher, _ := w.(http.Flusher)
+	// Use ResponseController so flushing works through middleware wrappers
+	// like loggingResponseWriter that don't themselves implement Flusher.
+	rc := http.NewResponseController(w)
 
 	pump := func(src io.ReadCloser, streamType byte, want bool) {
 		defer wg.Done()
@@ -575,9 +577,7 @@ func streamFramedLogs(w io.Writer, stdout io.ReadCloser, stderr io.ReadCloser, w
 				mu.Lock()
 				writeFrameHeader(w, streamType, n)
 				_, werr := w.Write(buf[:n])
-				if flusher != nil {
-					flusher.Flush()
-				}
+				_ = rc.Flush()
 				mu.Unlock()
 				if werr != nil {
 					return
