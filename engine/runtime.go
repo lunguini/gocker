@@ -37,8 +37,10 @@ type Runtime interface {
 	ImageRemove(ctx context.Context, image string) error
 	ImageBuild(ctx context.Context, args []string) error
 
-	// Networks
-	NetworkCreate(ctx context.Context, name string) error
+	// Networks. Labels may be nil. Compose v2 sends
+	// com.docker.compose.{project,network,version}; without these, it
+	// refuses to re-adopt the network on a subsequent 'docker compose up'.
+	NetworkCreate(ctx context.Context, name string, labels map[string]string) error
 	NetworkList(ctx context.Context) ([]NetworkInfo, error)
 	NetworkRemove(ctx context.Context, name string) error
 	NetworkConnect(ctx context.Context, network, container string) error

@@ -149,6 +149,7 @@ func ParseNerdctlContainerList(data []byte) ([]ContainerInfo, error) {
 			State:   getString(obj, "State", "state"),
 			Command: getString(obj, "Command", "command"),
 			Ports:   getString(obj, "Ports", "ports"),
+			Labels:  parseNerdctlLabels(getString(obj, "Labels", "labels")),
 		}
 		if created := getString(obj, "CreatedAt", "Created", "created"); created != "" {
 			if t, err := time.Parse(time.RFC3339, created); err == nil {
@@ -158,6 +159,45 @@ func ParseNerdctlContainerList(data []byte) ([]ContainerInfo, error) {
 		result = append(result, info)
 	}
 	return result, nil
+}
+
+// parseNerdctlLabels splits nerdctl's comma-separated Labels string into a
+// map. The string is shaped like "k1=v1,k2=v2,..." but values can contain
+// JSON fragments with embedded commas ({"a":1,"b":2} or [1,2]), so a naive
+// comma-split breaks. Split only on commas that are at brace/bracket depth
+// zero.
+func parseNerdctlLabels(raw string) map[string]string {
+	out := map[string]string{}
+	if raw == "" {
+		return out
+	}
+	var parts []string
+	depth := 0
+	start := 0
+	for i := 0; i < len(raw); i++ {
+		switch raw[i] {
+		case '{', '[':
+			depth++
+		case '}', ']':
+			if depth > 0 {
+				depth--
+			}
+		case ',':
+			if depth == 0 {
+				parts = append(parts, raw[start:i])
+				start = i + 1
+			}
+		}
+	}
+	parts = append(parts, raw[start:])
+	for _, p := range parts {
+		k, v, ok := strings.Cut(strings.TrimSpace(p), "=")
+		if !ok || k == "" {
+			continue
+		}
+		out[k] = v
+	}
+	return out
 }
 
 func (n *NerdctlRuntime) ContainerStop(ctx context.Context, nameOrID string) error {
@@ -333,8 +373,11 @@ func (n *NerdctlRuntime) ImageBuild(ctx context.Context, args []string) error {
 
 // --- Network operations ---
 
-func (n *NerdctlRuntime) NetworkCreate(ctx context.Context, name string) error {
-	_, stderr, err := n.Exec(ctx, "network", "create", name)
+func (n *NerdctlRuntime) NetworkCreate(ctx context.Context, name string, labels map[string]string) error {
+	args := []string{"network", "create"}
+	args = append(args, labelArgs(labels)...)
+	args = append(args, name)
+	_, stderr, err := n.Exec(ctx, args...)
 	if err != nil {
 		return wrapNerdctlErr(stderr, err)
 	}

@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"sort"
 	"strings"
 
 	"golang.org/x/term"
@@ -80,12 +81,24 @@ func (s *SharedVMRuntime) ContainerRun(ctx context.Context, args []string, inter
 			return fmt.Errorf("bind mount paths still not accessible after VM expansion: %v", unmapped)
 		}
 	}
-	gockerArgs := append([]string{"run"}, translated...)
-	vmArgs := s.proxyArgs(interactive, gockerArgs...)
-	if interactive {
-		return s.apple.ExecInteractive(ctx, vmArgs...)
+	// Skip the intermediate `gocker run` inside the VM and shell out to
+	// nerdctl directly. The inner gocker is mostly a pass-through for run
+	// flags, and older base images reject newer flags the API layer emits
+	// (--label is the most recent one). Bypassing avoids having to keep
+	// the in-VM gocker in lockstep with every new flag we expose.
+	runArgs := append([]string{"run"}, translated...)
+	outer := []string{"exec"}
+	if interactive && stdinIsTTY() {
+		outer = append(outer, "-i", "-t")
+	} else if interactive {
+		outer = append(outer, "-i")
 	}
-	stdout, stderr, err := s.apple.Exec(ctx, vmArgs...)
+	outer = append(outer, s.manager.Name(), "nerdctl")
+	outer = append(outer, runArgs...)
+	if interactive {
+		return s.apple.ExecInteractive(ctx, outer...)
+	}
+	stdout, stderr, err := s.apple.Exec(ctx, outer...)
 	if err != nil {
 		return fmt.Errorf("%s: %w", strings.TrimSpace(string(stderr)), err)
 	}
@@ -111,11 +124,16 @@ func (s *SharedVMRuntime) ContainerList(ctx context.Context, all bool) ([]engine
 	if !running {
 		return nil, nil
 	}
-	args := []string{"--format", "json", "ps"}
+	// Go directly to nerdctl — the intermediate in-VM gocker flattens
+	// Labels (among other fields) during its own parse/reprint cycle, so
+	// labels set by the API ('docker compose up') never reach callers of
+	// /containers/json. ParseNerdctlContainerList accepts nerdctl's JSON
+	// shape natively.
+	inner := []string{"ps", "--format", "json"}
 	if all {
-		args = append(args, "-a")
+		inner = append(inner, "-a")
 	}
-	vmArgs := s.proxyArgs(false, args...)
+	vmArgs := append([]string{"exec", s.manager.Name(), "nerdctl"}, inner...)
 	stdout, stderr, err := s.apple.Exec(ctx, vmArgs...)
 	if err != nil {
 		return nil, fmt.Errorf("%s: %w", strings.TrimSpace(string(stderr)), err)
@@ -284,8 +302,31 @@ func (s *SharedVMRuntime) ImageBuild(ctx context.Context, args []string) error {
 
 // --- Network operations ---
 
-func (s *SharedVMRuntime) NetworkCreate(ctx context.Context, name string) error {
-	return s.proxySimple(ctx, "network", "create", name)
+func (s *SharedVMRuntime) NetworkCreate(ctx context.Context, name string, labels map[string]string) error {
+	if err := s.manager.EnsureRunning(ctx); err != nil {
+		return err
+	}
+	// Bypass the intermediate in-VM gocker CLI and hit nerdctl directly —
+	// older base-images don't recognize --label on `gocker network create`.
+	// This keeps the label path working even before a fresh :base-dev rolls
+	// out. Every other shared runtime op still goes through gocker because
+	// they rely on its arg translation.
+	inner := []string{"network", "create"}
+	keys := make([]string, 0, len(labels))
+	for k := range labels {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	for _, k := range keys {
+		inner = append(inner, "--label", k+"="+labels[k])
+	}
+	inner = append(inner, name)
+	vmArgs := append([]string{"exec", s.manager.Name(), "nerdctl"}, inner...)
+	_, stderr, err := s.apple.Exec(ctx, vmArgs...)
+	if err != nil {
+		return fmt.Errorf("%s: %w", strings.TrimSpace(string(stderr)), err)
+	}
+	return nil
 }
 
 func (s *SharedVMRuntime) NetworkList(ctx context.Context) ([]engine.NetworkInfo, error) {

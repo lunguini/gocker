@@ -26,8 +26,21 @@ func (s *Server) handleContainerList(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var result []ContainerJSON
+	// Compose v2 drives 'docker compose exec SERVICE' off this filter — it
+	// asks /containers/json with label constraints identifying the
+	// project+service and picks the first match. Returning everything makes
+	// compose operate on the wrong container (client instead of server).
+	filt, ferr := parseListFilters(r.URL.Query().Get("filters"))
+	if ferr != nil {
+		writeError(w, http.StatusBadRequest, "invalid filters: "+ferr.Error())
+		return
+	}
+
+	result := []ContainerJSON{}
 	for _, c := range containers {
+		if !filt.match(c) {
+			continue
+		}
 		result = append(result, ContainerJSON{
 			ID:      c.ID,
 			Names:   []string{"/" + c.Name},
@@ -37,15 +50,13 @@ func (s *Server) handleContainerList(w http.ResponseWriter, r *http.Request) {
 			State:   deriveContainerState(c.State, c.Status),
 			Status:  c.Status,
 			Ports:   parseNerdctlPorts(c.Ports),
+			Labels:  c.Labels,
 			NetworkSettings: &NetworkSettings{
 				Networks: map[string]*EndpointSettings{
 					"bridge": {IPAddress: c.IP},
 				},
 			},
 		})
-	}
-	if result == nil {
-		result = []ContainerJSON{}
 	}
 	writeJSON(w, http.StatusOK, result)
 }
@@ -82,6 +93,13 @@ func (s *Server) handleContainerCreate(w http.ResponseWriter, r *http.Request) {
 	}
 	for _, env := range req.Env {
 		args = append(args, "-e", env)
+	}
+	// Compose v2 identifies containers it owns by label
+	// (com.docker.compose.{project,service,version}). Without these,
+	// `docker compose ps` leaves the Service column empty and
+	// `docker compose down` can't find its own containers.
+	for _, k := range sortedKeys(req.Labels) {
+		args = append(args, "--label", k+"="+req.Labels[k])
 	}
 	if req.HostConfig != nil {
 		for _, bind := range req.HostConfig.Binds {

@@ -24,7 +24,7 @@ type stubRuntime struct {
 	imageList        func(ctx context.Context) ([]engine.ImageInfo, error)
 	networkList      func(ctx context.Context) ([]engine.NetworkInfo, error)
 	volumeList       func(ctx context.Context) ([]engine.VolumeInfo, error)
-	networkCreate    func(ctx context.Context, name string) error
+	networkCreate    func(ctx context.Context, name string, labels map[string]string) error
 	volumeCreate     func(ctx context.Context, name string) error
 }
 
@@ -84,9 +84,9 @@ func (s *stubRuntime) ImageList(ctx context.Context) ([]engine.ImageInfo, error)
 }
 func (s *stubRuntime) ImageRemove(ctx context.Context, image string) error       { return nil }
 func (s *stubRuntime) ImageBuild(ctx context.Context, args []string) error       { return nil }
-func (s *stubRuntime) NetworkCreate(ctx context.Context, name string) error {
+func (s *stubRuntime) NetworkCreate(ctx context.Context, name string, labels map[string]string) error {
 	if s.networkCreate != nil {
-		return s.networkCreate(ctx, name)
+		return s.networkCreate(ctx, name, labels)
 	}
 	return nil
 }

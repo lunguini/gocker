@@ -20,12 +20,26 @@ func newNetworkCmd(eng engine.Runtime) *cli.Command {
 				Name:      "create",
 				Usage:     "Create a network",
 				ArgsUsage: "NAME",
+				Flags: []cli.Flag{
+					&cli.StringSliceFlag{
+						Name:  "label",
+						Usage: "Set metadata on the network (key=value, may be repeated)",
+					},
+				},
 				Action: func(ctx context.Context, cmd *cli.Command) error {
 					name := cmd.Args().First()
 					if name == "" {
 						return cli.Exit("requires network name", 1)
 					}
-					if err := eng.NetworkCreate(ctx, name); err != nil {
+					labels := map[string]string{}
+					for _, kv := range cmd.StringSlice("label") {
+						k, v, ok := strings.Cut(kv, "=")
+						if !ok {
+							return cli.Exit("invalid --label (want key=value): "+kv, 1)
+						}
+						labels[k] = v
+					}
+					if err := eng.NetworkCreate(ctx, name, labels); err != nil {
 						return err
 					}
 					fmt.Println(name)

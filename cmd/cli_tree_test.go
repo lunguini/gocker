@@ -206,7 +206,7 @@ func newPermissiveMockRuntime() *engine.MockRuntime {
 		ImageListFunc:         func(ctx context.Context) ([]engine.ImageInfo, error) { return nil, nil },
 		ImageRemoveFunc:       func(ctx context.Context, image string) error { return nil },
 		ImageBuildFunc:        func(ctx context.Context, args []string) error { return nil },
-		NetworkCreateFunc:     func(ctx context.Context, name string) error { return nil },
+		NetworkCreateFunc:     func(ctx context.Context, name string, labels map[string]string) error { return nil },
 		NetworkListFunc:       func(ctx context.Context) ([]engine.NetworkInfo, error) { return nil, nil },
 		NetworkRemoveFunc:     func(ctx context.Context, name string) error { return nil },
 		NetworkConnectFunc:    func(ctx context.Context, network, container string) error { return nil },

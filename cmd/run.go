@@ -32,6 +32,7 @@ func newRunCmd(eng engine.Runtime) *cli.Command {
 			&cli.StringFlag{Name: "hostname", Aliases: []string{"h"}, Usage: "Container hostname"},
 			&cli.StringFlag{Name: "cpus", Usage: "Number of CPUs"},
 			&cli.StringFlag{Name: "memory", Aliases: []string{"m"}, Usage: "Memory limit"},
+			&cli.StringSliceFlag{Name: "label", Aliases: []string{"l"}, Usage: "Set metadata on the container (key=value, may be repeated)"},
 		},
 		Action: func(ctx context.Context, cmd *cli.Command) error {
 			args := buildRunArgs(cmd)
@@ -93,6 +94,9 @@ func buildRunArgs(cmd *cli.Command) []string {
 	}
 	if memory := cmd.String("memory"); memory != "" {
 		args = append(args, "--memory", memory)
+	}
+	for _, l := range cmd.StringSlice("label") {
+		args = append(args, "--label", l)
 	}
 
 	args = append(args, cmd.Args().Slice()...)

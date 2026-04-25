@@ -1,1 +1,0 @@
-docker compose exec returns empty stdout via the hijacked /exec/X/start stream, and Labels (com.docker.compose.{project,service}) aren't forwarded through /containers/create. Until those are fixed the env/exec assertions fail even though the stack comes up.

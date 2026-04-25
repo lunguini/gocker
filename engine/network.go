@@ -4,15 +4,37 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"sort"
 	"strings"
 )
 
-func (e *Engine) NetworkCreate(ctx context.Context, name string) error {
-	_, stderr, err := e.Exec(ctx, "network", "create", name)
+func (e *Engine) NetworkCreate(ctx context.Context, name string, labels map[string]string) error {
+	args := []string{"network", "create"}
+	args = append(args, labelArgs(labels)...)
+	args = append(args, name)
+	_, stderr, err := e.Exec(ctx, args...)
 	if err != nil {
 		return fmt.Errorf("%s: %w", strings.TrimSpace(string(stderr)), err)
 	}
 	return nil
+}
+
+// labelArgs emits --label k=v pairs in a stable order (sorted by key) so the
+// resulting argv is deterministic across runs — helps tests and diffs.
+func labelArgs(labels map[string]string) []string {
+	if len(labels) == 0 {
+		return nil
+	}
+	keys := make([]string, 0, len(labels))
+	for k := range labels {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	args := make([]string, 0, 2*len(keys))
+	for _, k := range keys {
+		args = append(args, "--label", k+"="+labels[k])
+	}
+	return args
 }
 
 func (e *Engine) NetworkList(ctx context.Context) ([]NetworkInfo, error) {

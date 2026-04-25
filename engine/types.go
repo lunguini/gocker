@@ -12,6 +12,12 @@ type ContainerInfo struct {
 	Ports   string
 	Created time.Time
 	Command string
+	// Labels set at create time. Compose reads
+	// com.docker.compose.{project,service,oneoff,config-hash} off list
+	// responses to scope `docker compose ps` to its own project and fill
+	// the Service column. Missing labels → blank service name and compose
+	// treats the container as foreign.
+	Labels map[string]string
 }
 
 type ImageInfo struct {

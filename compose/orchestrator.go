@@ -61,7 +61,8 @@ func (o *Orchestrator) Up(ctx context.Context, opts UpOptions) error {
 		}
 		fullName := project + "_" + netName
 		fmt.Printf("Creating network %s\n", fullName)
-		if err := o.eng.NetworkCreate(ctx, fullName); err != nil {
+		labels := composeNetworkLabels(project, netName, net.External)
+		if err := o.eng.NetworkCreate(ctx, fullName, labels); err != nil {
 			// Network may already exist
 			if !strings.Contains(err.Error(), "already exists") {
 				fmt.Fprintf(os.Stderr, "Warning: creating network %s: %v\n", fullName, err)
@@ -82,7 +83,7 @@ func (o *Orchestrator) Up(ctx context.Context, opts UpOptions) error {
 	defaultNet := project + "_default"
 	if needsDefault {
 		fmt.Printf("Creating network %s\n", defaultNet)
-		if err := o.eng.NetworkCreate(ctx, defaultNet); err != nil {
+		if err := o.eng.NetworkCreate(ctx, defaultNet, composeNetworkLabels(project, "default", false)); err != nil {
 			if !strings.Contains(err.Error(), "already exists") {
 				fmt.Fprintf(os.Stderr, "Warning: creating default network: %v\n", err)
 			}
@@ -633,4 +634,19 @@ func appendUnique(slice []string, item string) []string {
 		}
 	}
 	return append(slice, item)
+}
+
+// composeNetworkLabels is the minimum set of labels Docker Compose v2
+// expects on a network it considers 'its own'. Without them, a
+// subsequent compose up refuses to adopt the network ("network was found
+// but has incorrect label") even though the name matches.
+func composeNetworkLabels(project, name string, external bool) map[string]string {
+    if external {
+        return nil
+    }
+    return map[string]string{
+        "com.docker.compose.project": project,
+        "com.docker.compose.network": name,
+        "com.docker.compose.version": "2.0",
+    }
 }

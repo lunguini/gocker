@@ -1,9 +1,21 @@
 package api
 
 import (
+	"sort"
 	"strconv"
 	"strings"
 )
+
+// sortedKeys returns the keys of m in sorted order. Used to produce a
+// deterministic argv when forwarding --label / --env flags to the backend.
+func sortedKeys(m map[string]string) []string {
+	keys := make([]string, 0, len(m))
+	for k := range m {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	return keys
+}
 
 // deriveContainerState normalizes a Runtime-reported State/Status pair into
 // one of the Docker API state strings (running, exited, created, paused,

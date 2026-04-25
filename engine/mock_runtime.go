@@ -27,7 +27,7 @@ type MockRuntime struct {
 	ImageListFunc          func(ctx context.Context) ([]ImageInfo, error)
 	ImageRemoveFunc        func(ctx context.Context, image string) error
 	ImageBuildFunc         func(ctx context.Context, args []string) error
-	NetworkCreateFunc      func(ctx context.Context, name string) error
+	NetworkCreateFunc      func(ctx context.Context, name string, labels map[string]string) error
 	NetworkListFunc        func(ctx context.Context) ([]NetworkInfo, error)
 	NetworkRemoveFunc      func(ctx context.Context, name string) error
 	NetworkConnectFunc     func(ctx context.Context, network, container string) error
@@ -168,11 +168,11 @@ func (m *MockRuntime) ImageBuild(ctx context.Context, args []string) error {
 	return m.ImageBuildFunc(ctx, args)
 }
 
-func (m *MockRuntime) NetworkCreate(ctx context.Context, name string) error {
+func (m *MockRuntime) NetworkCreate(ctx context.Context, name string, labels map[string]string) error {
 	if m.NetworkCreateFunc == nil {
 		panic("MockRuntime: NetworkCreate called but NetworkCreateFunc is nil")
 	}
-	return m.NetworkCreateFunc(ctx, name)
+	return m.NetworkCreateFunc(ctx, name, labels)
 }
 
 func (m *MockRuntime) NetworkList(ctx context.Context) ([]NetworkInfo, error) {

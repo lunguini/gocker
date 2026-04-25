@@ -110,8 +110,9 @@ type NetworkJSON struct {
 }
 
 type NetworkCreateRequest struct {
-	Name   string `json:"Name"`
-	Driver string `json:"Driver,omitempty"`
+	Name   string            `json:"Name"`
+	Driver string            `json:"Driver,omitempty"`
+	Labels map[string]string `json:"Labels,omitempty"`
 }
 
 type NetworkConnectRequest struct {

@@ -55,7 +55,7 @@ func (s *Server) handleNetworkCreate(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, err.Error())
 		return
 	}
-	if err := s.eng.NetworkCreate(r.Context(), req.Name); err != nil {
+	if err := s.eng.NetworkCreate(r.Context(), req.Name, req.Labels); err != nil {
 		writeError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
