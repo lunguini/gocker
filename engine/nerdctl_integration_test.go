@@ -136,7 +136,7 @@ func TestIntegration_Nerdctl_NetworkLifecycle(t *testing.T) {
 		_ = rt.NetworkRemove(ctx, name)
 	})
 
-	if err := rt.NetworkCreate(ctx, name); err != nil {
+	if err := rt.NetworkCreate(ctx, name, nil); err != nil {
 		t.Fatalf("NetworkCreate failed: %v", err)
 	}
 
