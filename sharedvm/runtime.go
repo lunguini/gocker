@@ -66,6 +66,17 @@ func (s *SharedVMRuntime) ExecStream(ctx context.Context, args ...string) (io.Re
 	return s.apple.ExecStream(ctx, vmArgs...)
 }
 
+func (s *SharedVMRuntime) ExecStreamSplit(ctx context.Context, args ...string) (io.ReadCloser, io.ReadCloser, error) {
+	if err := s.manager.EnsureRunning(ctx); err != nil {
+		return nil, nil, err
+	}
+	vmArgs := s.proxyArgs(false, args...)
+	if bypass, ok := nerdctlBypass(args); ok {
+		vmArgs = append([]string{"exec", s.manager.Name(), "nerdctl"}, bypass...)
+	}
+	return s.apple.ExecStreamSplit(ctx, vmArgs...)
+}
+
 // nerdctlBypass returns the args to pass directly to nerdctl when the
 // requested command would otherwise be routed through inner gocker.
 // Used to avoid waiting on a new gocker-base image before exposing flags

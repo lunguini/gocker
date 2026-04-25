@@ -8,6 +8,7 @@ import (
 	"os"
 	"os/exec"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -110,6 +111,56 @@ func (e *Engine) ExecStream(ctx context.Context, args ...string) (io.ReadCloser,
 		return nil, fmt.Errorf("start: %w", err)
 	}
 	return &streamReader{cmd: cmd, reader: stdout}, nil
+}
+
+func (e *Engine) ExecStreamSplit(ctx context.Context, args ...string) (io.ReadCloser, io.ReadCloser, error) {
+	return execStreamSplit(ctx, e.Binary, args...)
+}
+
+// execStreamSplit starts a command and returns separate stdout/stderr pipes.
+// The cmd.Wait runs in the background once both pipes hit EOF.
+func execStreamSplit(ctx context.Context, binary string, args ...string) (io.ReadCloser, io.ReadCloser, error) {
+	cmd := exec.CommandContext(ctx, binary, args...)
+	stdout, err := cmd.StdoutPipe()
+	if err != nil {
+		return nil, nil, fmt.Errorf("stdout pipe: %w", err)
+	}
+	stderr, err := cmd.StderrPipe()
+	if err != nil {
+		return nil, nil, fmt.Errorf("stderr pipe: %w", err)
+	}
+	if err := cmd.Start(); err != nil {
+		return nil, nil, fmt.Errorf("start: %w", err)
+	}
+	shared := &sharedCmd{cmd: cmd, remaining: 2}
+	return &splitReader{shared: shared, reader: stdout}, &splitReader{shared: shared, reader: stderr}, nil
+}
+
+type sharedCmd struct {
+	cmd       *exec.Cmd
+	mu        sync.Mutex
+	remaining int
+}
+
+type splitReader struct {
+	shared *sharedCmd
+	reader io.ReadCloser
+}
+
+func (s *splitReader) Read(p []byte) (int, error) {
+	return s.reader.Read(p)
+}
+
+func (s *splitReader) Close() error {
+	_ = s.reader.Close()
+	s.shared.mu.Lock()
+	s.shared.remaining--
+	last := s.shared.remaining == 0
+	s.shared.mu.Unlock()
+	if last {
+		return s.shared.cmd.Wait()
+	}
+	return nil
 }
 
 type streamReader struct {

@@ -1,7 +1,6 @@
 package api
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -261,24 +260,30 @@ func (s *Server) handleContainerLogs(w http.ResponseWriter, r *http.Request) {
 	args := append([]string{"logs"}, engine.LogsFlags(opts)...)
 	args = append(args, id)
 
+	wantStdout := q.Get("stdout") != "0" && q.Get("stdout") != "false"
+	wantStderr := q.Get("stderr") != "0" && q.Get("stderr") != "false"
+	// Defaults: if neither was specified, Docker returns nothing. Most
+	// clients pass at least one. Be liberal — if both unset, return both.
+	if q.Get("stdout") == "" && q.Get("stderr") == "" {
+		wantStdout, wantStderr = true, true
+	}
+
 	if opts.Follow {
-		stream, err := s.eng.ExecStream(r.Context(), args...)
+		stdout, stderr, err := s.eng.ExecStreamSplit(r.Context(), args...)
 		if err != nil {
 			writeError(w, http.StatusInternalServerError, err.Error())
 			return
 		}
-		defer func() { _ = stream.Close() }()
-		writeFramedChunks(w, stream)
+		streamFramedLogs(w, stdout, stderr, wantStdout, wantStderr)
 		return
 	}
 
-	stdout, _, err := s.eng.Exec(r.Context(), args...)
+	stdout, stderr, err := s.eng.ExecStreamSplit(r.Context(), args...)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
-	// Single-shot response: wrap the whole payload in one frame.
-	writeFramedChunks(w, bytes.NewReader(stdout))
+	streamFramedLogs(w, stdout, stderr, wantStdout, wantStderr)
 }
 
 // containerState returns the current state string (e.g. "running",
@@ -544,6 +549,52 @@ func (s *Server) handleExecInspect(w http.ResponseWriter, r *http.Request) {
 		"OpenStderr":    entry.config.AttachStderr,
 		"CanRemove":     !entry.running,
 	})
+}
+
+// streamFramedLogs concurrently consumes stdout/stderr pipes from a logs
+// command, writing each chunk into the Docker multiplex frame format
+// (header[0]=1 for stdout, 2 for stderr) so clients like lazydocker can
+// demultiplex them. Selectively suppresses streams the client opted out of.
+func streamFramedLogs(w io.Writer, stdout io.ReadCloser, stderr io.ReadCloser, wantStdout, wantStderr bool) {
+	var mu sync.Mutex
+	var wg sync.WaitGroup
+	flusher, _ := w.(http.Flusher)
+
+	pump := func(src io.ReadCloser, streamType byte, want bool) {
+		defer wg.Done()
+		defer func() { _ = src.Close() }()
+		buf := make([]byte, 4096)
+		for {
+			n, err := src.Read(buf)
+			// Always read both pipes so the producer doesn't block, but
+			// only frame the streams the client asked for.
+			if n > 0 && want {
+				mu.Lock()
+				writeFrameHeader(w, streamType, n)
+				_, werr := w.Write(buf[:n])
+				if flusher != nil {
+					flusher.Flush()
+				}
+				mu.Unlock()
+				if werr != nil {
+					return
+				}
+			}
+			if err != nil {
+				return
+			}
+		}
+	}
+	wg.Add(2)
+	go pump(stdout, 1, wantStdout)
+	go pump(stderr, 2, wantStderr)
+	wg.Wait()
+}
+
+func writeFrameHeader(w io.Writer, streamType byte, n int) {
+	header := []byte{streamType, 0, 0, 0,
+		byte(n >> 24), byte(n >> 16), byte(n >> 8), byte(n)}
+	_, _ = w.Write(header)
 }
 
 // writeFramedChunks reads from src in 4KB chunks and writes Docker's 8-byte

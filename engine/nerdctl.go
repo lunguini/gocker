@@ -71,6 +71,10 @@ func (n *NerdctlRuntime) ExecStream(ctx context.Context, args ...string) (io.Rea
 	return &streamReader{cmd: cmd, reader: stdout}, nil
 }
 
+func (n *NerdctlRuntime) ExecStreamSplit(ctx context.Context, args ...string) (io.ReadCloser, io.ReadCloser, error) {
+	return execStreamSplit(ctx, n.Binary, args...)
+}
+
 // --- Container operations ---
 
 func (n *NerdctlRuntime) ContainerRun(ctx context.Context, args []string, interactive bool) error {

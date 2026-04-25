@@ -43,6 +43,9 @@ func (s *stubRuntime) ExecStream(ctx context.Context, args ...string) (io.ReadCl
 	}
 	return nil, nil
 }
+func (s *stubRuntime) ExecStreamSplit(ctx context.Context, args ...string) (io.ReadCloser, io.ReadCloser, error) {
+	return nil, nil, nil
+}
 func (s *stubRuntime) ContainerRun(ctx context.Context, args []string, interactive bool) error {
 	if s.containerRun != nil {
 		return s.containerRun(ctx, args, interactive)

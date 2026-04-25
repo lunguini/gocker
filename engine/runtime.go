@@ -19,6 +19,7 @@ type Runtime interface {
 	Exec(ctx context.Context, args ...string) ([]byte, []byte, error)
 	ExecInteractive(ctx context.Context, args ...string) error
 	ExecStream(ctx context.Context, args ...string) (io.ReadCloser, error)
+	ExecStreamSplit(ctx context.Context, args ...string) (stdout io.ReadCloser, stderr io.ReadCloser, err error)
 
 	// Container lifecycle
 	ContainerRun(ctx context.Context, args []string, interactive bool) error

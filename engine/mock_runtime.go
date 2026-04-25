@@ -77,6 +77,10 @@ func (m *MockRuntime) ExecStream(ctx context.Context, args ...string) (io.ReadCl
 	return m.ExecStreamFunc(ctx, args...)
 }
 
+func (m *MockRuntime) ExecStreamSplit(ctx context.Context, args ...string) (io.ReadCloser, io.ReadCloser, error) {
+	panic("MockRuntime: ExecStreamSplit not implemented")
+}
+
 func (m *MockRuntime) ContainerRun(ctx context.Context, args []string, interactive bool) error {
 	if m.ContainerRunFunc == nil {
 		panic("MockRuntime: ContainerRun called but ContainerRunFunc is nil")
