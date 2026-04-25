@@ -199,7 +199,7 @@ func newPermissiveMockRuntime() *engine.MockRuntime {
 		ContainerStartFunc:    func(ctx context.Context, nameOrID string) error { return nil },
 		ContainerRemoveFunc:   func(ctx context.Context, nameOrID string, force bool) error { return nil },
 		ContainerExecFunc:     func(ctx context.Context, nameOrID string, args []string, interactive bool) error { return nil },
-		ContainerLogsFunc:     func(ctx context.Context, nameOrID string, follow bool) error { return nil },
+		ContainerLogsFunc:     func(ctx context.Context, nameOrID string, opts engine.LogsOptions) error { return nil },
 		ContainerInspectFunc:  func(ctx context.Context, nameOrID string) ([]byte, error) { return []byte("[]"), nil },
 		ImagePullFunc:         func(ctx context.Context, image string, opts engine.ImagePullOpts) error { return nil },
 		ImagePushFunc:         func(ctx context.Context, image string) error { return nil },

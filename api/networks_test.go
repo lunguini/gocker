@@ -63,7 +63,7 @@ func (s *stubRuntime) ContainerRemove(ctx context.Context, nameOrID string, forc
 func (s *stubRuntime) ContainerExec(ctx context.Context, nameOrID string, args []string, interactive bool) error {
 	return nil
 }
-func (s *stubRuntime) ContainerLogs(ctx context.Context, nameOrID string, follow bool) error {
+func (s *stubRuntime) ContainerLogs(ctx context.Context, nameOrID string, opts engine.LogsOptions) error {
 	return nil
 }
 func (s *stubRuntime) ContainerInspect(ctx context.Context, nameOrID string) ([]byte, error) {

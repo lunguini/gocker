@@ -428,13 +428,13 @@ func (o *Orchestrator) Logs(ctx context.Context, opts LogsOptions) error {
 		if !ok {
 			return fmt.Errorf("service %q not found in project", opts.Service)
 		}
-		return o.eng.ContainerLogs(ctx, svcState.ContainerID, opts.Follow)
+		return o.eng.ContainerLogs(ctx, svcState.ContainerID, engine.LogsOptions{Follow: opts.Follow})
 	}
 
 	// Show logs for all services (non-follow only for multi-service)
 	for svcName, svcState := range state.Services {
 		fmt.Printf("=== %s ===\n", svcName)
-		if err := o.eng.ContainerLogs(ctx, svcState.ContainerID, false); err != nil {
+		if err := o.eng.ContainerLogs(ctx, svcState.ContainerID, engine.LogsOptions{}); err != nil {
 			fmt.Fprintf(os.Stderr, "Warning: logs for %s: %v\n", svcName, err)
 		}
 		fmt.Println()

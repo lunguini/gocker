@@ -249,10 +249,11 @@ func (n *NerdctlRuntime) ContainerExec(ctx context.Context, nameOrID string, arg
 	return nil
 }
 
-func (n *NerdctlRuntime) ContainerLogs(ctx context.Context, nameOrID string, follow bool) error {
-	args := []string{"logs", nameOrID}
-	if follow {
-		args = append(args, "-f")
+func (n *NerdctlRuntime) ContainerLogs(ctx context.Context, nameOrID string, opts LogsOptions) error {
+	args := []string{"logs"}
+	args = append(args, LogsFlags(opts)...)
+	args = append(args, nameOrID)
+	if opts.Follow {
 		return n.ExecInteractive(ctx, args...)
 	}
 	stdout, stderr, err := n.Exec(ctx, args...)

@@ -11,6 +11,8 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
+
+	"github.com/lunguini/gocker/engine"
 )
 
 var (
@@ -223,7 +225,22 @@ func (s *Server) handleContainerInspect(w http.ResponseWriter, r *http.Request) 
 func (s *Server) handleContainerLogs(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
 	q := r.URL.Query()
-	follow := q.Get("follow") == "1" || q.Get("follow") == "true"
+	opts := engine.LogsOptions{
+		Follow:     q.Get("follow") == "1" || q.Get("follow") == "true",
+		Tail:       q.Get("tail"),
+		Since:      q.Get("since"),
+		Until:      q.Get("until"),
+		Timestamps: q.Get("timestamps") == "1" || q.Get("timestamps") == "true",
+	}
+	// Docker uses "0" / unset Unix epoch to mean "from the beginning". The
+	// underlying CLIs treat "0" as a literal timestamp and return nothing —
+	// drop it so they default to full backlog.
+	if opts.Since == "0" || opts.Since == "0.000000000" {
+		opts.Since = ""
+	}
+	if opts.Until == "0" || opts.Until == "0.000000000" {
+		opts.Until = ""
+	}
 
 	// Docker clients (including lazydocker) expect logs to be multiplexed
 	// with the same 8-byte frame header as /exec/{id}/start when the
@@ -234,17 +251,18 @@ func (s *Server) handleContainerLogs(w http.ResponseWriter, r *http.Request) {
 	// If follow=1 on a stopped container, downgrade to non-follow. Docker
 	// clients ask for follow by default but expect it to return and exit
 	// when the container isn't running; our backing `logs --follow` hangs
-	// waiting for new output instead. Crucial for debugging a crash —
-	// lazydocker follow=1 against an exited container otherwise returns
-	// nothing until the 3s curl timeout.
-	if follow {
+	// waiting for new output instead.
+	if opts.Follow {
 		if state, err := s.containerState(r.Context(), id); err == nil && state != "running" {
-			follow = false
+			opts.Follow = false
 		}
 	}
 
-	if follow {
-		stream, err := s.eng.ExecStream(r.Context(), "logs", id, "--follow")
+	args := append([]string{"logs"}, engine.LogsFlags(opts)...)
+	args = append(args, id)
+
+	if opts.Follow {
+		stream, err := s.eng.ExecStream(r.Context(), args...)
 		if err != nil {
 			writeError(w, http.StatusInternalServerError, err.Error())
 			return
@@ -254,7 +272,7 @@ func (s *Server) handleContainerLogs(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	stdout, _, err := s.eng.Exec(r.Context(), "logs", id)
+	stdout, _, err := s.eng.Exec(r.Context(), args...)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, err.Error())
 		return

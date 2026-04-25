@@ -27,7 +27,7 @@ type Runtime interface {
 	ContainerStart(ctx context.Context, nameOrID string) error
 	ContainerRemove(ctx context.Context, nameOrID string, force bool) error
 	ContainerExec(ctx context.Context, nameOrID string, args []string, interactive bool) error
-	ContainerLogs(ctx context.Context, nameOrID string, follow bool) error
+	ContainerLogs(ctx context.Context, nameOrID string, opts LogsOptions) error
 	ContainerInspect(ctx context.Context, nameOrID string) ([]byte, error)
 
 	// Images
@@ -52,6 +52,37 @@ type Runtime interface {
 	VolumeList(ctx context.Context) ([]VolumeInfo, error)
 	VolumeRemove(ctx context.Context, name string) error
 	VolumeInspect(ctx context.Context, name string) ([]byte, error)
+}
+
+// LogsOptions controls container log retrieval. Zero value: full backlog, no follow.
+type LogsOptions struct {
+	Follow     bool
+	Tail       string // "all" or a number; empty = backend default
+	Since      string // RFC3339 timestamp or duration like "10m"
+	Until      string // RFC3339 timestamp or duration
+	Timestamps bool
+}
+
+// LogsFlags renders LogsOptions as CLI flags compatible with both Apple's
+// `container logs` and `nerdctl logs`.
+func LogsFlags(opts LogsOptions) []string {
+	var args []string
+	if opts.Follow {
+		args = append(args, "--follow")
+	}
+	if opts.Tail != "" {
+		args = append(args, "--tail", opts.Tail)
+	}
+	if opts.Since != "" {
+		args = append(args, "--since", opts.Since)
+	}
+	if opts.Until != "" {
+		args = append(args, "--until", opts.Until)
+	}
+	if opts.Timestamps {
+		args = append(args, "--timestamps")
+	}
+	return args
 }
 
 // ImagePullOpts controls image pull behavior. The zero value uses backend defaults.

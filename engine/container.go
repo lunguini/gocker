@@ -166,10 +166,11 @@ func (e *Engine) ContainerExec(ctx context.Context, nameOrID string, args []stri
 	return nil
 }
 
-func (e *Engine) ContainerLogs(ctx context.Context, nameOrID string, follow bool) error {
-	args := []string{"logs", nameOrID}
-	if follow {
-		args = append(args, "--follow")
+func (e *Engine) ContainerLogs(ctx context.Context, nameOrID string, opts LogsOptions) error {
+	args := []string{"logs"}
+	args = append(args, LogsFlags(opts)...)
+	args = append(args, nameOrID)
+	if opts.Follow {
 		return e.ExecInteractive(ctx, args...)
 	}
 	stdout, stderr, err := e.Exec(ctx, args...)

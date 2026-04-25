@@ -41,6 +41,9 @@ func (s *SharedVMRuntime) Exec(ctx context.Context, args ...string) ([]byte, []b
 		return nil, nil, err
 	}
 	vmArgs := s.proxyArgs(false, args...)
+	if bypass, ok := nerdctlBypass(args); ok {
+		vmArgs = append([]string{"exec", s.manager.Name(), "nerdctl"}, bypass...)
+	}
 	return s.apple.Exec(ctx, vmArgs...)
 }
 
@@ -57,7 +60,25 @@ func (s *SharedVMRuntime) ExecStream(ctx context.Context, args ...string) (io.Re
 		return nil, err
 	}
 	vmArgs := s.proxyArgs(false, args...)
+	if bypass, ok := nerdctlBypass(args); ok {
+		vmArgs = append([]string{"exec", s.manager.Name(), "nerdctl"}, bypass...)
+	}
 	return s.apple.ExecStream(ctx, vmArgs...)
+}
+
+// nerdctlBypass returns the args to pass directly to nerdctl when the
+// requested command would otherwise be routed through inner gocker.
+// Used to avoid waiting on a new gocker-base image before exposing flags
+// that nerdctl already supports natively.
+func nerdctlBypass(args []string) ([]string, bool) {
+	if len(args) == 0 {
+		return nil, false
+	}
+	switch args[0] {
+	case "logs":
+		return args, true
+	}
+	return nil, false
 }
 
 // --- Container lifecycle ---
@@ -194,17 +215,26 @@ func (s *SharedVMRuntime) ContainerExec(ctx context.Context, nameOrID string, ar
 	return nil
 }
 
-func (s *SharedVMRuntime) ContainerLogs(ctx context.Context, nameOrID string, follow bool) error {
+func (s *SharedVMRuntime) ContainerLogs(ctx context.Context, nameOrID string, opts engine.LogsOptions) error {
 	if err := s.manager.EnsureRunning(ctx); err != nil {
 		return err
 	}
-	gockerArgs := []string{"logs", nameOrID}
-	if follow {
-		gockerArgs = append(gockerArgs, "--follow")
-		vmArgs := s.proxyArgs(true, gockerArgs...)
+	// Bypass inner gocker — older gocker-base images don't know the new
+	// tail/since/until/timestamps flags. nerdctl accepts them natively.
+	innerArgs := []string{"logs"}
+	innerArgs = append(innerArgs, engine.LogsFlags(opts)...)
+	innerArgs = append(innerArgs, nameOrID)
+	outer := []string{"exec"}
+	if opts.Follow && stdinIsTTY() {
+		outer = append(outer, "-i", "-t")
+	} else {
+		outer = append(outer, "-i")
+	}
+	outer = append(outer, s.manager.Name(), "nerdctl")
+	vmArgs := append(outer, innerArgs...)
+	if opts.Follow {
 		return s.apple.ExecInteractive(ctx, vmArgs...)
 	}
-	vmArgs := s.proxyArgs(false, gockerArgs...)
 	stdout, stderr, err := s.apple.Exec(ctx, vmArgs...)
 	if err != nil {
 		return fmt.Errorf("%s: %w", strings.TrimSpace(string(stderr)), err)

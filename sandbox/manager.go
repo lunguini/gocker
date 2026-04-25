@@ -237,5 +237,5 @@ func (m *Manager) Logs(ctx context.Context, name string, follow bool) error {
 	if err != nil {
 		return fmt.Errorf("sandbox %q not found", name)
 	}
-	return m.eng.ContainerLogs(ctx, state.ContainerID, follow)
+	return m.eng.ContainerLogs(ctx, state.ContainerID, engine.LogsOptions{Follow: follow})
 }
