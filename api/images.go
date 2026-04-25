@@ -68,16 +68,26 @@ func imageRefMatches(img engine.ImageInfo, ref string) bool {
 		return true
 	}
 	candidates := []string{img.Name, full}
-	// Expand a short name to its docker.io/library/* equivalent so
-	// "alpine" (as stored) matches "docker.io/library/alpine:3" (requested).
-	if !strings.Contains(img.Name, "/") {
+	// Expand a stored Name to its docker.io/* equivalent so a request that
+	// includes the registry resolves. Two cases the in-VM parser flattens:
+	//   "alpine"               → "docker.io/library/alpine"
+	//   "tensorchord/pgvecto"  → "docker.io/tensorchord/pgvecto"
+	// (third-party namespaces are NOT under /library/, so we have to try
+	// docker.io/<as-is> too, not just docker.io/library/<as-is>).
+	switch strings.Count(img.Name, "/") {
+	case 0:
 		candidates = append(candidates,
 			"docker.io/library/"+img.Name,
 			"docker.io/library/"+img.Name+":"+img.Tag,
 		)
+	case 1:
+		candidates = append(candidates,
+			"docker.io/"+img.Name,
+			"docker.io/"+img.Name+":"+img.Tag,
+		)
 	}
-	// Also contract the stored Name (e.g. "docker.io/library/alpine") down
-	// to the short form so the reverse case works.
+	// Also contract the stored Name down to the short form for the
+	// reverse case (request uses short, stored is qualified).
 	for _, prefix := range []string{"docker.io/library/", "docker.io/"} {
 		if short := strings.TrimPrefix(img.Name, prefix); short != img.Name {
 			candidates = append(candidates, short, short+":"+img.Tag)

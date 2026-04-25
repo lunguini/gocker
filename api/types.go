@@ -64,6 +64,7 @@ type PortBind struct {
 type CreateContainerRequest struct {
 	Image      string            `json:"Image"`
 	Cmd        []string          `json:"Cmd,omitempty"`
+	Entrypoint []string          `json:"Entrypoint,omitempty"`
 	Env        []string          `json:"Env,omitempty"`
 	Tty        bool              `json:"Tty"`
 	OpenStdin  bool              `json:"OpenStdin"`

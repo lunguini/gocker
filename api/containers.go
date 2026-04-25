@@ -114,6 +114,19 @@ func (s *Server) handleContainerCreate(w http.ResponseWriter, r *http.Request) {
 			args = append(args, "--network", req.HostConfig.NetworkMode)
 		}
 	}
+	// Compose v2 (and Docker SDK) sends Entrypoint as a separate field; we
+	// were silently dropping it, so containers ran the image's default
+	// CMD instead of the user-supplied entrypoint and exited immediately
+	// (alpine's /bin/sh without args returns 0). nerdctl/Apple's
+	// --entrypoint takes a single string; if compose sends a multi-element
+	// list, the first element is the entrypoint binary and the rest are
+	// arguments that have to come AFTER the image, joined with Cmd.
+	if len(req.Entrypoint) > 0 {
+		args = append(args, "--entrypoint", req.Entrypoint[0])
+		// Tail elements become the leading positional args (before Cmd).
+		// We accumulate them into a separate slice that's flushed below.
+		req.Cmd = append(append([]string{}, req.Entrypoint[1:]...), req.Cmd...)
+	}
 	args = append(args, req.Image)
 	// Guard the user's Cmd against flag reparsing in downstream CLIs. The
 	// inner `gocker run` (or nerdctl) consumes this arg list; if Cmd begins

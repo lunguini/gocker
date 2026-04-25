@@ -12,7 +12,7 @@ fail_count=0
 
 # 1. All three services from the three files must be in compose ps.
 # shellcheck disable=SC2086
-ps=$("$GOCKER" compose -p "$PROJECT" $COMPOSE_EXTRA ps 2>/dev/null || true)
+ps=$(compose_cmd -p "$PROJECT" ps 2>&1 || true)
 for svc in orchestrator db cache; do
     if echo "$ps" | grep -qE "\\b${svc}\\b"; then
         log_pass "service $svc is running (3-file merge succeeded)"

@@ -1,0 +1,1 @@
+orchestrator service uses service-name DNS (pg_isready -h db, redis-cli -h cache) — nerdctl-in-VM has no embedded DNS / --network-alias / network connect, so docker compose v2 can't apply per-service aliases. orchestrator therefore can never reach db/cache and the assertions time out. Works through `gocker compose` because our proxy doesn't rely on per-service DNS.

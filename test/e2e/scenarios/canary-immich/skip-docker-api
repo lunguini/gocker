@@ -1,0 +1,1 @@
+immich-server reads DB_HOSTNAME=db / REDIS_HOSTNAME=redis from compose env and connects by service name. Same nerdctl-in-VM service-DNS gap as compose-stack, canary-wordpress.

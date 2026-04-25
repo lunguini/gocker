@@ -33,8 +33,8 @@ gocker_exec "$PROJECT" redis -- redis-cli BGREWRITEAOF >/dev/null
 sleep 2
 
 log_info "restarting compose (down without -v, then up) to test volume persistence"
-"$GOCKER" compose -p "$PROJECT" down >/dev/null
-"$GOCKER" compose -p "$PROJECT" up -d >/dev/null
+compose_cmd -p "$PROJECT" down >/dev/null
+(cd "$SCRIPT_DIR" && compose_cmd -p "$PROJECT" up -d) >/dev/null
 
 if ! wait_for_healthy "$PROJECT" 60; then
     log_fail "redis did not come back up after restart"

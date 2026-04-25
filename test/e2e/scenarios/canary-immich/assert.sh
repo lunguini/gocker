@@ -35,7 +35,7 @@ log_info "waiting for immich server to bootstrap (can take 2-3 minutes cold)..."
 deadline=$(( $(date +%s) + 240 ))
 started=false
 while [ "$(date +%s)" -lt "$deadline" ]; do
-    if "$GOCKER" compose -p "$PROJECT" logs server 2>/dev/null \
+    if compose_cmd -p "$PROJECT" logs server 2>/dev/null \
            | grep -Eq 'Nest application successfully started|Listening on|Immich Server is running|Immich server is running|listening on port'; then
         started=true
         break
@@ -47,7 +47,7 @@ if [ "$started" = true ]; then
 else
     log_fail "immich server did not print a startup marker within 240s"
     # Dump last 30 log lines so we can see what it did say
-    "$GOCKER" compose -p "$PROJECT" logs server 2>/dev/null | tail -30
+    compose_cmd -p "$PROJECT" logs server 2>/dev/null | tail -30
     fail_count=$((fail_count + 1))
 fi
 

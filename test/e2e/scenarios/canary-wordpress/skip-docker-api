@@ -1,0 +1,1 @@
+wordpress connects to MariaDB via the bare service name `db` set in WORDPRESS_DB_HOST. nerdctl-in-VM has no embedded DNS / --network-alias / network connect, so service-name resolution doesn't work via the docker-api path. Same root cause as compose-stack and canary-immich. Re-enable once nerdctl supports compose's network aliases or we synthesize /etc/hosts entries.

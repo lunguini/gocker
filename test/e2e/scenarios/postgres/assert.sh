@@ -36,8 +36,8 @@ if ! retry_exec 30 "$PROJECT" db psql -U e2e -d e2e -c \
 fi
 
 log_info "restarting postgres to verify volume persistence"
-"$GOCKER" compose -p "$PROJECT" down >/dev/null
-"$GOCKER" compose -p "$PROJECT" up -d >/dev/null
+compose_cmd -p "$PROJECT" down >/dev/null
+(cd "$SCRIPT_DIR" && compose_cmd -p "$PROJECT" up -d) >/dev/null
 
 if ! wait_for_healthy "$PROJECT" 90; then
     log_fail "postgres did not return to healthy after restart"
