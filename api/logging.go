@@ -82,9 +82,13 @@ func loggingMiddleware(next http.Handler, logger *Logger) http.Handler {
 		lw := &loggingResponseWriter{ResponseWriter: w, status: http.StatusOK}
 		next.ServeHTTP(lw, r)
 		dur := time.Since(start)
+		path := r.URL.Path
+		if r.URL.RawQuery != "" {
+			path += "?" + r.URL.RawQuery
+		}
 		line := fmt.Sprintf("%s %s %s %d %s",
 			time.Now().Format("15:04:05"),
-			r.Method, r.URL.Path, lw.status, formatDuration(dur))
+			r.Method, path, lw.status, formatDuration(dur))
 		if lw.status >= 400 && len(lw.body) > 0 {
 			errMsg := strings.TrimSpace(string(lw.body))
 			if len(errMsg) > 200 {
