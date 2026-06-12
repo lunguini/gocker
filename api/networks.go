@@ -66,7 +66,7 @@ func (s *Server) handleNetworkCreate(w http.ResponseWriter, r *http.Request) {
 func (s *Server) handleNetworkRemove(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
 	if err := s.eng.NetworkRemove(r.Context(), id); err != nil {
-		writeError(w, http.StatusInternalServerError, err.Error())
+		writeRuntimeError(w, err, "network", id)
 		return
 	}
 	s.publishEvent("network", "destroy", id, nil)

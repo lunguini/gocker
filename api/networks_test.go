@@ -27,6 +27,11 @@ type stubRuntime struct {
 	volumeList       func(ctx context.Context) ([]engine.VolumeInfo, error)
 	networkCreate    func(ctx context.Context, name string, labels map[string]string) error
 	volumeCreate     func(ctx context.Context, name string) error
+	containerStart   func(ctx context.Context, nameOrID string) error
+	containerStop    func(ctx context.Context, nameOrID string) error
+	containerRemove  func(ctx context.Context, nameOrID string, force bool) error
+	networkRemove    func(ctx context.Context, name string) error
+	volumeRemove     func(ctx context.Context, name string) error
 }
 
 func (s *stubRuntime) Validate() error    { return nil }
@@ -62,9 +67,22 @@ func (s *stubRuntime) ContainerList(ctx context.Context, all bool) ([]engine.Con
 	}
 	return nil, nil
 }
-func (s *stubRuntime) ContainerStop(ctx context.Context, nameOrID string) error         { return nil }
-func (s *stubRuntime) ContainerStart(ctx context.Context, nameOrID string) error        { return nil }
+func (s *stubRuntime) ContainerStop(ctx context.Context, nameOrID string) error {
+	if s.containerStop != nil {
+		return s.containerStop(ctx, nameOrID)
+	}
+	return nil
+}
+func (s *stubRuntime) ContainerStart(ctx context.Context, nameOrID string) error {
+	if s.containerStart != nil {
+		return s.containerStart(ctx, nameOrID)
+	}
+	return nil
+}
 func (s *stubRuntime) ContainerRemove(ctx context.Context, nameOrID string, force bool) error {
+	if s.containerRemove != nil {
+		return s.containerRemove(ctx, nameOrID, force)
+	}
 	return nil
 }
 func (s *stubRuntime) ContainerExec(ctx context.Context, nameOrID string, args []string, interactive bool) error {
@@ -103,7 +121,12 @@ func (s *stubRuntime) NetworkList(ctx context.Context) ([]engine.NetworkInfo, er
 	}
 	return nil, nil
 }
-func (s *stubRuntime) NetworkRemove(ctx context.Context, name string) error { return nil }
+func (s *stubRuntime) NetworkRemove(ctx context.Context, name string) error {
+	if s.networkRemove != nil {
+		return s.networkRemove(ctx, name)
+	}
+	return nil
+}
 func (s *stubRuntime) NetworkConnect(ctx context.Context, network, container string) error {
 	return nil
 }
@@ -128,7 +151,12 @@ func (s *stubRuntime) VolumeList(ctx context.Context) ([]engine.VolumeInfo, erro
 	}
 	return nil, nil
 }
-func (s *stubRuntime) VolumeRemove(ctx context.Context, name string) error { return nil }
+func (s *stubRuntime) VolumeRemove(ctx context.Context, name string) error {
+	if s.volumeRemove != nil {
+		return s.volumeRemove(ctx, name)
+	}
+	return nil
+}
 func (s *stubRuntime) VolumeInspect(ctx context.Context, name string) ([]byte, error) {
 	if s.volumeInspect != nil {
 		return s.volumeInspect(ctx, name)

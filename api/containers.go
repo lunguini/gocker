@@ -161,7 +161,7 @@ func (s *Server) handleContainerCreate(w http.ResponseWriter, r *http.Request) {
 func (s *Server) handleContainerStart(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
 	if err := s.eng.ContainerStart(r.Context(), id); err != nil {
-		writeError(w, http.StatusInternalServerError, err.Error())
+		writeRuntimeError(w, err, "container", id)
 		return
 	}
 	s.publishEvent("container", "start", id, nil)
@@ -171,7 +171,7 @@ func (s *Server) handleContainerStart(w http.ResponseWriter, r *http.Request) {
 func (s *Server) handleContainerStop(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
 	if err := s.eng.ContainerStop(r.Context(), id); err != nil {
-		writeError(w, http.StatusInternalServerError, err.Error())
+		writeRuntimeError(w, err, "container", id)
 		return
 	}
 	s.publishEvent("container", "stop", id, nil)
@@ -182,7 +182,7 @@ func (s *Server) handleContainerStop(w http.ResponseWriter, r *http.Request) {
 func (s *Server) handleContainerKill(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
 	if err := s.eng.ContainerStop(r.Context(), id); err != nil {
-		writeError(w, http.StatusInternalServerError, err.Error())
+		writeRuntimeError(w, err, "container", id)
 		return
 	}
 	s.publishEvent("container", "kill", id, nil)
@@ -194,7 +194,7 @@ func (s *Server) handleContainerRemove(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
 	force := r.URL.Query().Get("force") == "1" || r.URL.Query().Get("force") == "true"
 	if err := s.eng.ContainerRemove(r.Context(), id, force); err != nil {
-		writeError(w, http.StatusInternalServerError, err.Error())
+		writeRuntimeError(w, err, "container", id)
 		return
 	}
 	s.publishEvent("container", "destroy", id, nil)

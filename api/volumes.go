@@ -45,7 +45,7 @@ func (s *Server) handleVolumeCreate(w http.ResponseWriter, r *http.Request) {
 func (s *Server) handleVolumeRemove(w http.ResponseWriter, r *http.Request) {
 	name := r.PathValue("name")
 	if err := s.eng.VolumeRemove(r.Context(), name); err != nil {
-		writeError(w, http.StatusInternalServerError, err.Error())
+		writeRuntimeError(w, err, "volume", name)
 		return
 	}
 	s.publishEvent("volume", "destroy", name, nil)

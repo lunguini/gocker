@@ -104,13 +104,7 @@ func imageRefMatches(img engine.ImageInfo, ref string) bool {
 func (s *Server) handleImageRemove(w http.ResponseWriter, r *http.Request) {
 	name := r.PathValue("name")
 	if err := s.eng.ImageRemove(r.Context(), name); err != nil {
-		errMsg := err.Error()
-		if strings.Contains(errMsg, "not found") || strings.Contains(errMsg, "No such image") ||
-			strings.Contains(errMsg, "unknown image") || strings.Contains(errMsg, "does not exist") {
-			writeError(w, http.StatusNotFound, "No such image: "+name)
-		} else {
-			writeError(w, http.StatusInternalServerError, errMsg)
-		}
+		writeRuntimeError(w, err, "image", name)
 		return
 	}
 	s.publishEvent("image", "delete", name, map[string]string{"name": name})
