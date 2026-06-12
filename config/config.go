@@ -7,6 +7,8 @@ import (
 	"regexp"
 
 	"gopkg.in/yaml.v3"
+
+	"github.com/lunguini/gocker/internal/fsutil"
 )
 
 // cleanSemverTag matches exactly vX.Y.Z with no pre-release / build suffix.
@@ -161,6 +163,5 @@ func (c *Config) RuntimeBinary() string {
 }
 
 func configPath() string {
-	home, _ := os.UserHomeDir()
-	return filepath.Join(home, ".gocker", "config.yaml")
+	return filepath.Join(fsutil.HomeDir(), ".gocker", "config.yaml")
 }

@@ -22,8 +22,7 @@ type SandboxState struct {
 }
 
 func sandboxDir() string {
-	home, _ := os.UserHomeDir()
-	return filepath.Join(home, ".gocker", "sandboxes")
+	return filepath.Join(fsutil.HomeDir(), ".gocker", "sandboxes")
 }
 
 func statePath(name string) string {

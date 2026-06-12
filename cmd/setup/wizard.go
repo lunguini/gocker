@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/lunguini/gocker/config"
+	"github.com/lunguini/gocker/internal/fsutil"
 )
 
 // Options controls wizard behavior.
@@ -63,7 +64,7 @@ func RunWizard(ctx context.Context, opts Options) error {
 		return nil
 	}
 
-	home, _ := os.UserHomeDir()
+	home := fsutil.HomeDir()
 	socket := home + "/.gocker/gocker.sock"
 
 	if Confirm("Add DOCKER_HOST + testcontainers env vars to your shell rc?", true) {

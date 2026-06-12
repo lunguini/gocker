@@ -5,6 +5,8 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+
+	"github.com/lunguini/gocker/internal/fsutil"
 )
 
 type ConfigMount struct {
@@ -15,7 +17,7 @@ type ConfigMount struct {
 }
 
 func ClaudeConfigMounts(syncConfig, syncState, managedSettings bool) []ConfigMount {
-	home, _ := os.UserHomeDir()
+	home := fsutil.HomeDir()
 	var mounts []ConfigMount
 
 	sandboxHome := "/home/sandbox"
@@ -46,7 +48,7 @@ func ClaudeConfigMounts(syncConfig, syncState, managedSettings bool) []ConfigMou
 }
 
 func CodexConfigMounts(syncConfig, syncState, managedSettings bool) []ConfigMount {
-	home, _ := os.UserHomeDir()
+	home := fsutil.HomeDir()
 	var mounts []ConfigMount
 
 	if syncConfig {
@@ -73,7 +75,7 @@ var agentConfigFuncs = map[string]func(syncConfig, syncState, managedSettings bo
 //
 // We mount the host session dir at the VM's expected session path.
 func SessionSyncMounts(hostWorkspace, containerWorkspace string) []ConfigMount {
-	home, _ := os.UserHomeDir()
+	home := fsutil.HomeDir()
 	sandboxHome := "/home/sandbox"
 
 	hostHash := pathToHash(hostWorkspace)

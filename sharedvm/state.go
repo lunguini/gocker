@@ -21,8 +21,7 @@ type VMState struct {
 }
 
 var stateDir = func() string {
-	home, _ := os.UserHomeDir()
-	return filepath.Join(home, ".gocker", "sharedvm")
+	return filepath.Join(fsutil.HomeDir(), ".gocker", "sharedvm")
 }
 
 var statePath = func() string {

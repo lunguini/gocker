@@ -12,13 +12,13 @@ import (
 	"github.com/lunguini/gocker/api"
 	"github.com/lunguini/gocker/config"
 	"github.com/lunguini/gocker/engine"
+	"github.com/lunguini/gocker/internal/fsutil"
 	"github.com/lunguini/gocker/sharedvm"
 	"github.com/urfave/cli/v3"
 )
 
 func gockerDir() string {
-	home, _ := os.UserHomeDir()
-	return filepath.Join(home, ".gocker")
+	return filepath.Join(fsutil.HomeDir(), ".gocker")
 }
 
 func newDaemonCmd(eng engine.Runtime) *cli.Command {

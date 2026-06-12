@@ -9,8 +9,7 @@ import (
 )
 
 func composeDir() string {
-	home, _ := os.UserHomeDir()
-	return filepath.Join(home, ".gocker", "compose")
+	return filepath.Join(fsutil.HomeDir(), ".gocker", "compose")
 }
 
 func projectDir(name string) string {
