@@ -84,6 +84,9 @@ The user has `docker` aliased to `gocker` on this system. When tools or scripts 
 ## Key Design Decisions
 
 - **Pure shell-out, no CGo.** All operations translate to CLI subcommands via `os/exec`. Single static Go binary.
+- **Container binary resolution (macOS).** Priority: `runtimeBinary` in config > `exec.LookPath("container")` > `/usr/local/bin/container` fallback (kept last because GUI-launched processes can have a minimal PATH). See `resolveContainerBinary` in `engine/detect.go`. Never hardcode the binary path elsewhere.
+- **Atomic state writes.** All JSON/YAML state files (sandbox, sharedvm, compose, config) go through `internal/fsutil.WriteFileAtomic` (temp file + rename) so a crash mid-write can't corrupt state. New state persistence must use it, not bare `os.WriteFile`. Likewise use `fsutil.HomeDir()` (fails fast with a clear message) instead of `home, _ := os.UserHomeDir()` when building `~/.gocker` paths — the silent variant produces paths rooted at `/` when `$HOME` is unset.
+- **API not-found mapping.** Runtime errors in `api/` handlers go through `writeRuntimeError` (`api/errors.go`), which string-matches known "doesn't exist" phrasings from Apple CLI/nerdctl and returns Docker-style 404s. Add new phrasings to `isNotFoundErr`, not inline in handlers.
 - **Runtime interface.** `engine.Runtime` abstracts over Apple Container CLI (macOS) and nerdctl (Linux). `SharedVMRuntime` proxies commands into a persistent VM for hybrid/shared isolation modes.
 - **urfave/cli v3 (not Cobra).** Uses generics-based flag access: `cmd.String("name")`, `cmd.Bool("force")`. Root is `*cli.Command`, not `*cli.App`. Action signature: `func(ctx context.Context, cmd *cli.Command) error`.
 - **Flexible JSON parsing.** Apple's `container` CLI output is not yet stable. Parse functions handle both JSON arrays and newline-delimited JSON objects. Field lookups use variadic `getString(m, "id", "ID", "Id")` for case-insensitive field matching.
