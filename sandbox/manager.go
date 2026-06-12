@@ -228,8 +228,11 @@ func (m *Manager) Attach(ctx context.Context, name string) error {
 		return fmt.Errorf("sandbox %q not found", name)
 	}
 	// Apple's container CLI has no "attach" command.
-	// Use "exec" with an interactive shell instead.
-	return m.eng.ContainerExec(ctx, state.ContainerID, []string{"/bin/bash"}, true)
+	// Use "exec" with an interactive shell instead. Launch via /bin/sh
+	// (present in virtually every image) and upgrade to bash when
+	// available, so bash-less images don't fail with a cryptic exec error.
+	shell := []string{"/bin/sh", "-c", "command -v bash >/dev/null 2>&1 && exec bash || exec sh"}
+	return m.eng.ContainerExec(ctx, state.ContainerID, shell, true)
 }
 
 func (m *Manager) Logs(ctx context.Context, name string, follow bool) error {
