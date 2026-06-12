@@ -1,6 +1,7 @@
 package config
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -84,17 +85,33 @@ func Defaults() *Config {
 	}
 }
 
-// Load reads ~/.gocker/config.yaml. Returns defaults if the file doesn't exist.
+// Load reads ~/.gocker/config.yaml. Returns defaults if the file doesn't
+// exist. A malformed file falls back to defaults with a warning on stderr —
+// hard-failing here would break every command (including the docker alias)
+// over a config typo.
 func Load() *Config {
+	path := configPath()
+	cfg, err := LoadFrom(path)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "warning: ignoring invalid config %s: %v (using defaults: isolation=%s)\n", path, err, cfg.Isolation)
+	}
+	return cfg
+}
+
+// LoadFrom reads a config file from an explicit path. A missing file returns
+// defaults with no error; a malformed file returns defaults alongside the
+// parse error.
+func LoadFrom(path string) (*Config, error) {
 	cfg := Defaults()
 
-	path := configPath()
 	data, err := os.ReadFile(path)
 	if err != nil {
-		return cfg
+		return cfg, nil
 	}
 
-	_ = yaml.Unmarshal(data, cfg)
+	if err := yaml.Unmarshal(data, cfg); err != nil {
+		return Defaults(), fmt.Errorf("parsing YAML: %w", err)
+	}
 
 	// Migrate top-level `workspaceDirs` into sharedVM.workspaceDirs.
 	if len(cfg.LegacyWorkspaceDirs) > 0 && len(cfg.SharedVM.WorkspaceDirs) == 0 {
@@ -102,7 +119,7 @@ func Load() *Config {
 	}
 	cfg.LegacyWorkspaceDirs = nil
 
-	return cfg
+	return cfg, nil
 }
 
 // IsolationFor returns the effective isolation mode for a subsystem.
