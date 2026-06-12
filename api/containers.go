@@ -353,7 +353,10 @@ func (s *Server) handleExecStart(w http.ResponseWriter, r *http.Request) {
 	// shapes require a hijacked bidirectional stream (Docker CLI upgrades
 	// from HTTP to a raw TCP stream).
 	var req ExecStartRequest
-	_ = json.NewDecoder(r.Body).Decode(&req)
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil && err != io.EOF {
+		writeError(w, http.StatusBadRequest, "malformed exec start request: "+err.Error())
+		return
+	}
 	// Tty can be set at create OR start time; the start value wins if present.
 	tty := entry.config.Tty || req.Tty
 
