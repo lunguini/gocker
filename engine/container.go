@@ -15,7 +15,7 @@ func (e *Engine) ContainerRun(ctx context.Context, args []string, interactive bo
 	}
 	stdout, stderr, err := e.Exec(ctx, cmdArgs...)
 	if err != nil {
-		return fmt.Errorf("%s: %w", strings.TrimSpace(string(stderr)), err)
+		return cliError(stderr, err)
 	}
 	out := strings.TrimSpace(string(stdout))
 	if out != "" {
@@ -31,7 +31,7 @@ func (e *Engine) ContainerList(ctx context.Context, all bool) ([]ContainerInfo, 
 	}
 	stdout, stderr, err := e.Exec(ctx, args...)
 	if err != nil {
-		return nil, fmt.Errorf("%s: %w", strings.TrimSpace(string(stderr)), err)
+		return nil, cliError(stderr, err)
 	}
 	return parseContainerListJSON(stdout)
 }
@@ -126,7 +126,7 @@ func getString(m map[string]any, keys ...string) string {
 func (e *Engine) ContainerStop(ctx context.Context, nameOrID string) error {
 	_, stderr, err := e.Exec(ctx, "stop", nameOrID)
 	if err != nil {
-		return fmt.Errorf("%s: %w", strings.TrimSpace(string(stderr)), err)
+		return cliError(stderr, err)
 	}
 	return nil
 }
@@ -134,7 +134,7 @@ func (e *Engine) ContainerStop(ctx context.Context, nameOrID string) error {
 func (e *Engine) ContainerStart(ctx context.Context, nameOrID string) error {
 	_, stderr, err := e.Exec(ctx, "start", nameOrID)
 	if err != nil {
-		return fmt.Errorf("%s: %w", strings.TrimSpace(string(stderr)), err)
+		return cliError(stderr, err)
 	}
 	return nil
 }
@@ -145,7 +145,7 @@ func (e *Engine) ContainerRemove(ctx context.Context, nameOrID string, force boo
 	}
 	_, stderr, err := e.Exec(ctx, "delete", nameOrID)
 	if err != nil {
-		return fmt.Errorf("%s: %w", strings.TrimSpace(string(stderr)), err)
+		return cliError(stderr, err)
 	}
 	return nil
 }
@@ -157,7 +157,7 @@ func (e *Engine) ContainerExec(ctx context.Context, nameOrID string, args []stri
 	}
 	stdout, stderr, err := e.Exec(ctx, cmdArgs...)
 	if err != nil {
-		return fmt.Errorf("%s: %w", strings.TrimSpace(string(stderr)), err)
+		return cliError(stderr, err)
 	}
 	out := strings.TrimSpace(string(stdout))
 	if out != "" {
@@ -175,7 +175,7 @@ func (e *Engine) ContainerLogs(ctx context.Context, nameOrID string, opts LogsOp
 	}
 	stdout, stderr, err := e.Exec(ctx, args...)
 	if err != nil {
-		return fmt.Errorf("%s: %w", strings.TrimSpace(string(stderr)), err)
+		return cliError(stderr, err)
 	}
 	out := string(stdout) + string(stderr)
 	if out != "" {
@@ -187,7 +187,7 @@ func (e *Engine) ContainerLogs(ctx context.Context, nameOrID string, opts LogsOp
 func (e *Engine) ContainerInspect(ctx context.Context, nameOrID string) ([]byte, error) {
 	stdout, stderr, err := e.Exec(ctx, "inspect", nameOrID)
 	if err != nil {
-		return nil, fmt.Errorf("%s: %w", strings.TrimSpace(string(stderr)), err)
+		return nil, cliError(stderr, err)
 	}
 	return stdout, nil
 }

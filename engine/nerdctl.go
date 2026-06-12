@@ -109,7 +109,7 @@ func wrapRunErr(label string, args []string, stdout, stderr []byte, err error) e
 	if msg == "" {
 		msg = fmt.Sprintf("%s %s", label, strings.Join(args, " "))
 	}
-	return fmt.Errorf("%s: %w", msg, err)
+	return &cliErr{msg: msg, cause: err, sentinel: classifySentinel(msg)}
 }
 
 // wrapNerdctlErr normalizes the stderr-less 'exit status 1' case for
@@ -119,7 +119,7 @@ func wrapNerdctlErr(stderr []byte, err error) error {
 	if msg == "" {
 		msg = "nerdctl produced no output"
 	}
-	return fmt.Errorf("%s: %w", msg, err)
+	return &cliErr{msg: msg, cause: err, sentinel: classifySentinel(msg)}
 }
 
 func (n *NerdctlRuntime) ContainerList(ctx context.Context, all bool) ([]ContainerInfo, error) {
@@ -129,7 +129,7 @@ func (n *NerdctlRuntime) ContainerList(ctx context.Context, all bool) ([]Contain
 	}
 	stdout, stderr, err := n.Exec(ctx, args...)
 	if err != nil {
-		return nil, fmt.Errorf("%s: %w", strings.TrimSpace(string(stderr)), err)
+		return nil, cliError(stderr, err)
 	}
 	return ParseNerdctlContainerList(stdout)
 }
@@ -274,7 +274,7 @@ func (n *NerdctlRuntime) ContainerLogs(ctx context.Context, nameOrID string, opt
 func (n *NerdctlRuntime) ContainerInspect(ctx context.Context, nameOrID string) ([]byte, error) {
 	stdout, stderr, err := n.Exec(ctx, "inspect", nameOrID)
 	if err != nil {
-		return nil, fmt.Errorf("%s: %w", strings.TrimSpace(string(stderr)), err)
+		return nil, cliError(stderr, err)
 	}
 	return stdout, nil
 }
@@ -309,7 +309,7 @@ func (n *NerdctlRuntime) ImagePush(ctx context.Context, image string) error {
 func (n *NerdctlRuntime) ImageList(ctx context.Context) ([]ImageInfo, error) {
 	stdout, stderr, err := n.Exec(ctx, "images", "--format", "json")
 	if err != nil {
-		return nil, fmt.Errorf("%s: %w", strings.TrimSpace(string(stderr)), err)
+		return nil, cliError(stderr, err)
 	}
 	return ParseNerdctlImageList(stdout)
 }
@@ -392,7 +392,7 @@ func (n *NerdctlRuntime) NetworkCreate(ctx context.Context, name string, labels 
 func (n *NerdctlRuntime) NetworkList(ctx context.Context) ([]NetworkInfo, error) {
 	stdout, stderr, err := n.Exec(ctx, "network", "ls", "--format", "json")
 	if err != nil {
-		return nil, fmt.Errorf("%s: %w", strings.TrimSpace(string(stderr)), err)
+		return nil, cliError(stderr, err)
 	}
 	return ParseNerdctlNetworkList(stdout)
 }
@@ -456,7 +456,7 @@ func (n *NerdctlRuntime) NetworkDisconnect(ctx context.Context, network, contain
 func (n *NerdctlRuntime) NetworkInspect(ctx context.Context, name string) ([]byte, error) {
 	stdout, stderr, err := n.Exec(ctx, "network", "inspect", name)
 	if err != nil {
-		return nil, fmt.Errorf("%s: %w", strings.TrimSpace(string(stderr)), err)
+		return nil, cliError(stderr, err)
 	}
 	return stdout, nil
 }
@@ -474,7 +474,7 @@ func (n *NerdctlRuntime) VolumeCreate(ctx context.Context, name string) error {
 func (n *NerdctlRuntime) VolumeList(ctx context.Context) ([]VolumeInfo, error) {
 	stdout, stderr, err := n.Exec(ctx, "volume", "ls", "--format", "json")
 	if err != nil {
-		return nil, fmt.Errorf("%s: %w", strings.TrimSpace(string(stderr)), err)
+		return nil, cliError(stderr, err)
 	}
 	return ParseNerdctlVolumeList(stdout)
 }
@@ -511,7 +511,7 @@ func (n *NerdctlRuntime) VolumeRemove(ctx context.Context, name string) error {
 func (n *NerdctlRuntime) VolumeInspect(ctx context.Context, name string) ([]byte, error) {
 	stdout, stderr, err := n.Exec(ctx, "volume", "inspect", name)
 	if err != nil {
-		return nil, fmt.Errorf("%s: %w", strings.TrimSpace(string(stderr)), err)
+		return nil, cliError(stderr, err)
 	}
 	return stdout, nil
 }

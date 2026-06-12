@@ -2,6 +2,7 @@ package compose
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"sort"
@@ -9,6 +10,13 @@ import (
 
 	"github.com/lunguini/gocker/engine"
 )
+
+// alreadyExists reports whether err means the resource already exists —
+// classified by the engine, or by text for errors proxied through the
+// shared VM where classification is lost.
+func alreadyExists(err error) bool {
+	return errors.Is(err, engine.ErrAlreadyExists) || strings.Contains(err.Error(), "already exists")
+}
 
 // Orchestrator manages compose project lifecycle.
 type Orchestrator struct {
@@ -64,7 +72,7 @@ func (o *Orchestrator) Up(ctx context.Context, opts UpOptions) error {
 		labels := composeNetworkLabels(project, netName, net.External)
 		if err := o.eng.NetworkCreate(ctx, fullName, labels); err != nil {
 			// Network may already exist
-			if !strings.Contains(err.Error(), "already exists") {
+			if !alreadyExists(err) {
 				fmt.Fprintf(os.Stderr, "Warning: creating network %s: %v\n", fullName, err)
 			}
 		} else {
@@ -84,7 +92,7 @@ func (o *Orchestrator) Up(ctx context.Context, opts UpOptions) error {
 	if needsDefault {
 		fmt.Printf("Creating network %s\n", defaultNet)
 		if err := o.eng.NetworkCreate(ctx, defaultNet, composeNetworkLabels(project, "default", false)); err != nil {
-			if !strings.Contains(err.Error(), "already exists") {
+			if !alreadyExists(err) {
 				fmt.Fprintf(os.Stderr, "Warning: creating default network: %v\n", err)
 			}
 		} else {
@@ -101,7 +109,7 @@ func (o *Orchestrator) Up(ctx context.Context, opts UpOptions) error {
 		fullName := project + "_" + volName
 		fmt.Printf("Creating volume %s\n", fullName)
 		if err := o.eng.VolumeCreate(ctx, fullName); err != nil {
-			if !strings.Contains(err.Error(), "already exists") {
+			if !alreadyExists(err) {
 				fmt.Fprintf(os.Stderr, "Warning: creating volume %s: %v\n", fullName, err)
 			}
 		}

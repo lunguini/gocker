@@ -1,17 +1,23 @@
 package api
 
 import (
+	"errors"
 	"net/http"
 	"strings"
+
+	"github.com/lunguini/gocker/engine"
 )
 
 // isNotFoundErr reports whether a runtime error means "resource doesn't
-// exist". Both Apple's container CLI and nerdctl only expose this through
-// error text, so string matching is the only option — keep every known
-// phrasing here so handlers don't grow their own variants.
+// exist". The engine layer classifies CLI stderr into engine.ErrNotFound;
+// the string matching below remains as a fallback for errors that arrive
+// without classification (e.g. proxied through the shared VM).
 func isNotFoundErr(err error) bool {
 	if err == nil {
 		return false
+	}
+	if errors.Is(err, engine.ErrNotFound) {
+		return true
 	}
 	msg := strings.ToLower(err.Error())
 	for _, marker := range []string{

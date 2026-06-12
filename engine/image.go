@@ -3,7 +3,6 @@ package engine
 import (
 	"context"
 	"encoding/json"
-	"fmt"
 	"os"
 	"strconv"
 	"strings"
@@ -63,7 +62,7 @@ func (e *Engine) ImagePush(ctx context.Context, image string) error {
 func (e *Engine) ImageList(ctx context.Context) ([]ImageInfo, error) {
 	stdout, stderr, err := e.Exec(ctx, "image", "list", "--format", "json")
 	if err != nil {
-		return nil, fmt.Errorf("%s: %w", strings.TrimSpace(string(stderr)), err)
+		return nil, cliError(stderr, err)
 	}
 	return parseImageListJSON(stdout)
 }
@@ -165,7 +164,7 @@ func parseReference(ref string) (name, tag string) {
 func (e *Engine) ImageRemove(ctx context.Context, image string) error {
 	_, stderr, err := e.Exec(ctx, "image", "delete", image)
 	if err != nil {
-		return fmt.Errorf("%s: %w", strings.TrimSpace(string(stderr)), err)
+		return cliError(stderr, err)
 	}
 	return nil
 }

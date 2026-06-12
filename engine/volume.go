@@ -3,7 +3,6 @@ package engine
 import (
 	"context"
 	"encoding/json"
-	"fmt"
 	"strings"
 	"time"
 )
@@ -11,7 +10,7 @@ import (
 func (e *Engine) VolumeCreate(ctx context.Context, name string) error {
 	_, stderr, err := e.Exec(ctx, "volume", "create", name)
 	if err != nil {
-		return fmt.Errorf("%s: %w", strings.TrimSpace(string(stderr)), err)
+		return cliError(stderr, err)
 	}
 	return nil
 }
@@ -19,7 +18,7 @@ func (e *Engine) VolumeCreate(ctx context.Context, name string) error {
 func (e *Engine) VolumeList(ctx context.Context) ([]VolumeInfo, error) {
 	stdout, stderr, err := e.Exec(ctx, "volume", "list", "--format", "json")
 	if err != nil {
-		return nil, fmt.Errorf("%s: %w", strings.TrimSpace(string(stderr)), err)
+		return nil, cliError(stderr, err)
 	}
 	return parseVolumeListJSON(stdout)
 }
@@ -67,7 +66,7 @@ func parseVolumeListJSON(data []byte) ([]VolumeInfo, error) {
 func (e *Engine) VolumeRemove(ctx context.Context, name string) error {
 	_, stderr, err := e.Exec(ctx, "volume", "delete", name)
 	if err != nil {
-		return fmt.Errorf("%s: %w", strings.TrimSpace(string(stderr)), err)
+		return cliError(stderr, err)
 	}
 	return nil
 }
@@ -75,7 +74,7 @@ func (e *Engine) VolumeRemove(ctx context.Context, name string) error {
 func (e *Engine) VolumeInspect(ctx context.Context, name string) ([]byte, error) {
 	stdout, stderr, err := e.Exec(ctx, "volume", "inspect", name)
 	if err != nil {
-		return nil, fmt.Errorf("%s: %w", strings.TrimSpace(string(stderr)), err)
+		return nil, cliError(stderr, err)
 	}
 	return stdout, nil
 }

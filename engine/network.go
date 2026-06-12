@@ -3,7 +3,6 @@ package engine
 import (
 	"context"
 	"encoding/json"
-	"fmt"
 	"sort"
 	"strings"
 )
@@ -14,7 +13,7 @@ func (e *Engine) NetworkCreate(ctx context.Context, name string, labels map[stri
 	args = append(args, name)
 	_, stderr, err := e.Exec(ctx, args...)
 	if err != nil {
-		return fmt.Errorf("%s: %w", strings.TrimSpace(string(stderr)), err)
+		return cliError(stderr, err)
 	}
 	return nil
 }
@@ -40,7 +39,7 @@ func labelArgs(labels map[string]string) []string {
 func (e *Engine) NetworkList(ctx context.Context) ([]NetworkInfo, error) {
 	stdout, stderr, err := e.Exec(ctx, "network", "list", "--format", "json")
 	if err != nil {
-		return nil, fmt.Errorf("%s: %w", strings.TrimSpace(string(stderr)), err)
+		return nil, cliError(stderr, err)
 	}
 	return parseNetworkListJSON(stdout)
 }
@@ -128,7 +127,7 @@ func extractLabelsFromAny(m map[string]any) map[string]string {
 func (e *Engine) NetworkRemove(ctx context.Context, name string) error {
 	_, stderr, err := e.Exec(ctx, "network", "delete", name)
 	if err != nil {
-		return fmt.Errorf("%s: %w", strings.TrimSpace(string(stderr)), err)
+		return cliError(stderr, err)
 	}
 	return nil
 }
@@ -136,7 +135,7 @@ func (e *Engine) NetworkRemove(ctx context.Context, name string) error {
 func (e *Engine) NetworkConnect(ctx context.Context, network, container string) error {
 	_, stderr, err := e.Exec(ctx, "network", "connect", network, container)
 	if err != nil {
-		return fmt.Errorf("%s: %w", strings.TrimSpace(string(stderr)), err)
+		return cliError(stderr, err)
 	}
 	return nil
 }
@@ -144,7 +143,7 @@ func (e *Engine) NetworkConnect(ctx context.Context, network, container string) 
 func (e *Engine) NetworkDisconnect(ctx context.Context, network, container string) error {
 	_, stderr, err := e.Exec(ctx, "network", "disconnect", network, container)
 	if err != nil {
-		return fmt.Errorf("%s: %w", strings.TrimSpace(string(stderr)), err)
+		return cliError(stderr, err)
 	}
 	return nil
 }
@@ -152,7 +151,7 @@ func (e *Engine) NetworkDisconnect(ctx context.Context, network, container strin
 func (e *Engine) NetworkInspect(ctx context.Context, name string) ([]byte, error) {
 	stdout, stderr, err := e.Exec(ctx, "network", "inspect", name)
 	if err != nil {
-		return nil, fmt.Errorf("%s: %w", strings.TrimSpace(string(stderr)), err)
+		return nil, cliError(stderr, err)
 	}
 	return stdout, nil
 }
