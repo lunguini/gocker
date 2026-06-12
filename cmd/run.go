@@ -23,7 +23,7 @@ func newRunCmd(eng engine.Runtime) *cli.Command {
 			&cli.StringSliceFlag{Name: "volume", Aliases: []string{"v"}, Usage: "Bind mount a volume"},
 			&cli.StringSliceFlag{Name: "publish", Aliases: []string{"p"}, Usage: "Publish a port"},
 			&cli.StringSliceFlag{Name: "env", Aliases: []string{"e"}, Usage: "Set environment variables"},
-			&cli.StringFlag{Name: "env-file", Usage: "Read env vars from file"},
+			&cli.StringSliceFlag{Name: "env-file", Usage: "Read env vars from file (may be repeated)"},
 			&cli.StringFlag{Name: "workdir", Aliases: []string{"w"}, Usage: "Working directory inside the container"},
 			&cli.BoolFlag{Name: "rm", Usage: "Remove container when it exits"},
 			&cli.StringFlag{Name: "network", Usage: "Connect to a network"},
@@ -69,7 +69,7 @@ func buildRunArgs(cmd *cli.Command) ([]string, error) {
 	for _, e := range cmd.StringSlice("env") {
 		args = append(args, "-e", e)
 	}
-	if envFile := cmd.String("env-file"); envFile != "" {
+	for _, envFile := range cmd.StringSlice("env-file") {
 		envs, err := readEnvFile(envFile)
 		if err != nil {
 			return nil, err
@@ -119,6 +119,14 @@ func readEnvFile(path string) ([]string, error) {
 	for _, line := range strings.Split(string(data), "\n") {
 		line = strings.TrimSpace(line)
 		if line == "" || strings.HasPrefix(line, "#") {
+			continue
+		}
+		// Docker semantics: a bare KEY (no '=') inherits the host value
+		// and is dropped when the host doesn't have it set.
+		if !strings.Contains(line, "=") {
+			if val, ok := os.LookupEnv(line); ok {
+				envs = append(envs, line+"="+val)
+			}
 			continue
 		}
 		envs = append(envs, line)
