@@ -35,14 +35,17 @@ func newRunCmd(eng engine.Runtime) *cli.Command {
 			&cli.StringSliceFlag{Name: "label", Aliases: []string{"l"}, Usage: "Set metadata on the container (key=value, may be repeated)"},
 		},
 		Action: func(ctx context.Context, cmd *cli.Command) error {
-			args := buildRunArgs(cmd)
+			args, err := buildRunArgs(cmd)
+			if err != nil {
+				return err
+			}
 			interactive := cmd.Bool("interactive") || cmd.Bool("tty")
 			return eng.ContainerRun(ctx, args, interactive)
 		},
 	}
 }
 
-func buildRunArgs(cmd *cli.Command) []string {
+func buildRunArgs(cmd *cli.Command) ([]string, error) {
 	var args []string
 
 	if cmd.Bool("interactive") {
@@ -67,7 +70,11 @@ func buildRunArgs(cmd *cli.Command) []string {
 		args = append(args, "-e", e)
 	}
 	if envFile := cmd.String("env-file"); envFile != "" {
-		for _, e := range readEnvFile(envFile) {
+		envs, err := readEnvFile(envFile)
+		if err != nil {
+			return nil, err
+		}
+		for _, e := range envs {
 			args = append(args, "-e", e)
 		}
 	}
@@ -100,13 +107,13 @@ func buildRunArgs(cmd *cli.Command) []string {
 	}
 
 	args = append(args, cmd.Args().Slice()...)
-	return args
+	return args, nil
 }
 
-func readEnvFile(path string) []string {
+func readEnvFile(path string) ([]string, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {
-		return nil
+		return nil, fmt.Errorf("reading env file: %w", err)
 	}
 	var envs []string
 	for _, line := range strings.Split(string(data), "\n") {
@@ -116,5 +123,5 @@ func readEnvFile(path string) []string {
 		}
 		envs = append(envs, line)
 	}
-	return envs
+	return envs, nil
 }
