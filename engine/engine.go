@@ -18,10 +18,7 @@ type Engine struct {
 }
 
 func New(binary string) *Engine {
-	if binary == "" {
-		binary = "/usr/local/bin/container"
-	}
-	return &Engine{Binary: binary}
+	return &Engine{Binary: resolveContainerBinary(binary)}
 }
 
 func (e *Engine) BinaryPath() string {
@@ -31,7 +28,7 @@ func (e *Engine) BinaryPath() string {
 func (e *Engine) Validate() error {
 	if _, err := os.Stat(e.Binary); err != nil {
 		if os.IsNotExist(err) {
-			return fmt.Errorf("apple container CLI not found at %s; run 'gocker setup' to install it", e.Binary)
+			return fmt.Errorf("apple container CLI not found at %s (also not on PATH); run 'gocker setup' to install it, or set runtimeBinary in ~/.gocker/config.yaml if it lives elsewhere", e.Binary)
 		}
 		return fmt.Errorf("cannot access container binary at %s: %w", e.Binary, err)
 	}

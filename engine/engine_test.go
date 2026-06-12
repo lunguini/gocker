@@ -26,7 +26,7 @@ func TestValidate_BinaryMissing(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected error for missing binary, got nil")
 	}
-	expected := "apple container CLI not found at /nonexistent/path/container; run 'gocker setup' to install it"
+	expected := "apple container CLI not found at /nonexistent/path/container (also not on PATH); run 'gocker setup' to install it, or set runtimeBinary in ~/.gocker/config.yaml if it lives elsewhere"
 	if err.Error() != expected {
 		t.Errorf("expected %q, got %q", expected, err.Error())
 	}

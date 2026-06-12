@@ -12,11 +12,7 @@ import (
 func DetectRuntime(binaryOverride string) (Runtime, error) {
 	switch runtime.GOOS {
 	case "darwin":
-		binary := binaryOverride
-		if binary == "" {
-			binary = "/usr/local/bin/container"
-		}
-		return New(binary), nil
+		return New(resolveContainerBinary(binaryOverride)), nil
 
 	case "linux":
 		binary := binaryOverride
@@ -31,4 +27,18 @@ func DetectRuntime(binaryOverride string) (Runtime, error) {
 	default:
 		return nil, fmt.Errorf("unsupported platform: %s", runtime.GOOS)
 	}
+}
+
+// resolveContainerBinary picks the Apple container CLI binary path.
+// Priority: explicit override (config runtimeBinary / flag) > $PATH >
+// /usr/local/bin/container. The hardcoded fallback stays last because
+// GUI-launched processes often run with a minimal PATH.
+func resolveContainerBinary(override string) string {
+	if override != "" {
+		return override
+	}
+	if path, err := exec.LookPath("container"); err == nil {
+		return path
+	}
+	return "/usr/local/bin/container"
 }
