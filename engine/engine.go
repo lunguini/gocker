@@ -97,6 +97,28 @@ func (e *Engine) ExecInteractive(ctx context.Context, args ...string) error {
 	return cmd.Run()
 }
 
+// execInteractiveTee runs like ExecInteractive but tees stderr into a
+// buffer so failures can be classified (cliError) while the user still
+// sees live output. Used by interactive pulls, where a bare "exit status 1"
+// would otherwise hide e.g. registry 401s from the error chain.
+func (e *Engine) execInteractiveTee(ctx context.Context, args ...string) error {
+	oldState := saveTermState()
+	if oldState != nil {
+		defer restoreTermState(oldState)
+	}
+
+	var stderr bytes.Buffer
+	cmd := exec.CommandContext(ctx, e.Binary, args...)
+	cmd.Stdin = os.Stdin
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = io.MultiWriter(os.Stderr, &stderr)
+
+	if err := cmd.Run(); err != nil {
+		return cliError(stderr.Bytes(), err)
+	}
+	return nil
+}
+
 func (e *Engine) ExecStream(ctx context.Context, args ...string) (io.ReadCloser, error) {
 	cmd := exec.CommandContext(ctx, e.Binary, args...)
 	stdout, err := cmd.StdoutPipe()

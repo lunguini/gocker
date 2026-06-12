@@ -21,7 +21,7 @@ func (e *Engine) ImagePull(ctx context.Context, image string, opts ImagePullOpts
 		}
 		return nil
 	}
-	return e.ExecInteractive(ctx, args...)
+	return e.execInteractiveTee(ctx, args...)
 }
 
 // buildPullArgs constructs the argv for `container image pull`. Exposed for testing.

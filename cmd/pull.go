@@ -2,6 +2,8 @@ package cmd
 
 import (
 	"context"
+	"errors"
+	"fmt"
 
 	"github.com/lunguini/gocker/engine"
 	"github.com/urfave/cli/v3"
@@ -32,11 +34,15 @@ func newPullCmd(eng engine.Runtime) *cli.Command {
 			if image == "" {
 				return cli.Exit("requires image name", 1)
 			}
-			return eng.ImagePull(ctx, image, engine.ImagePullOpts{
+			err := eng.ImagePull(ctx, image, engine.ImagePullOpts{
 				Platform:      cmd.String("platform"),
 				MaxConcurrent: int(cmd.Int("max-concurrent-downloads")),
 				Progress:      cmd.String("progress"),
 			})
+			if errors.Is(err, engine.ErrUnauthorized) {
+				return fmt.Errorf("%w\n\nThe registry rejected the request — authenticate with 'gocker login' and retry", err)
+			}
+			return err
 		},
 	}
 }
