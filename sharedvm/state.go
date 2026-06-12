@@ -5,6 +5,8 @@ import (
 	"os"
 	"path/filepath"
 	"time"
+
+	"github.com/lunguini/gocker/internal/fsutil"
 )
 
 const vmName = "gocker-shared"
@@ -34,7 +36,7 @@ func SaveVMState(s *VMState) error {
 	if err != nil {
 		return err
 	}
-	return os.WriteFile(statePath(), data, 0644)
+	return fsutil.WriteFileAtomic(statePath(), data, 0644)
 }
 
 func LoadVMState() (*VMState, error) {

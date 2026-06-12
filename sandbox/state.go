@@ -5,6 +5,8 @@ import (
 	"os"
 	"path/filepath"
 	"time"
+
+	"github.com/lunguini/gocker/internal/fsutil"
 )
 
 type SandboxState struct {
@@ -35,7 +37,7 @@ func SaveState(s *SandboxState) error {
 	if err != nil {
 		return err
 	}
-	return os.WriteFile(statePath(s.Name), data, 0644)
+	return fsutil.WriteFileAtomic(statePath(s.Name), data, 0644)
 }
 
 func LoadState(name string) (*SandboxState, error) {

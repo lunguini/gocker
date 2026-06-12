@@ -4,6 +4,8 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+
+	"github.com/lunguini/gocker/internal/fsutil"
 )
 
 func composeDir() string {
@@ -26,7 +28,7 @@ func SaveProject(p *ProjectState) error {
 	if err != nil {
 		return err
 	}
-	return os.WriteFile(statePath(p.Name), data, 0644)
+	return fsutil.WriteFileAtomic(statePath(p.Name), data, 0644)
 }
 
 func LoadProject(name string) (*ProjectState, error) {

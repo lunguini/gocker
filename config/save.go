@@ -6,6 +6,8 @@ import (
 	"path/filepath"
 
 	"gopkg.in/yaml.v3"
+
+	"github.com/lunguini/gocker/internal/fsutil"
 )
 
 // Save writes cfg to ~/.gocker/config.yaml, creating the directory if needed.
@@ -25,7 +27,7 @@ func Save(cfg *Config) error {
 	}
 
 	path := filepath.Join(dir, "config.yaml")
-	if err := os.WriteFile(path, data, 0o644); err != nil {
+	if err := fsutil.WriteFileAtomic(path, data, 0o644); err != nil {
 		return fmt.Errorf("writing %s: %w", path, err)
 	}
 	return nil
