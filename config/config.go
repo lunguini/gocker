@@ -165,3 +165,8 @@ func (c *Config) RuntimeBinary() string {
 func configPath() string {
 	return filepath.Join(fsutil.HomeDir(), ".gocker", "config.yaml")
 }
+
+// Path returns the location gocker reads its config from (~/.gocker/config.yaml).
+func Path() string {
+	return configPath()
+}

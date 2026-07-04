@@ -34,11 +34,20 @@ func DetectRuntime(binaryOverride string) (Runtime, error) {
 // /usr/local/bin/container. The hardcoded fallback stays last because
 // GUI-launched processes often run with a minimal PATH.
 func resolveContainerBinary(override string) string {
+	path, _ := ResolveBinaryInfo(override)
+	return path
+}
+
+// ResolveBinaryInfo reports the resolved Apple container CLI path along with
+// how it was found — "config" (explicit override), "PATH" (found on $PATH),
+// or "fallback" (the hardcoded /usr/local/bin/container). It powers the
+// `gocker doctor` diagnostics so users can see why a given binary was chosen.
+func ResolveBinaryInfo(override string) (path, source string) {
 	if override != "" {
-		return override
+		return override, "config"
 	}
-	if path, err := exec.LookPath("container"); err == nil {
-		return path
+	if p, err := exec.LookPath("container"); err == nil {
+		return p, "PATH"
 	}
-	return "/usr/local/bin/container"
+	return "/usr/local/bin/container", "fallback"
 }

@@ -107,6 +107,7 @@ func NewApp(version string) *cli.Command {
 			newBuildCmd(generalRT),
 			newComposeCmd(appleRT), // compose proxies to nerdctl inside a VM
 			newDaemonCmd(generalRT), // uses SharedVMRuntime in shared/hybrid mode
+			newDoctorCmd(),
 			newExecCmd(generalRT),
 			newImageCmd(generalRT),
 			newImagesCmd(generalRT),
