@@ -1,0 +1,5 @@
+# All internal docs live under .docs/ (encrypted). There is no .specs/ folder;
+# its rule is kept only as a safety guard so a stray file there can never be
+# committed as plaintext.
+.docs/** filter=git-crypt diff=git-crypt
+.specs/** filter=git-crypt diff=git-crypt
