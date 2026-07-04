@@ -29,14 +29,20 @@ func statePath(name string) string {
 	return filepath.Join(sandboxDir(), name+".json")
 }
 
+func lockPath() string {
+	return filepath.Join(fsutil.HomeDir(), ".gocker", "sandboxes.lock")
+}
+
 func SaveState(s *SandboxState) error {
-	dir := sandboxDir()
-	_ = os.MkdirAll(dir, 0755)
-	data, err := json.MarshalIndent(s, "", "  ")
-	if err != nil {
-		return err
-	}
-	return fsutil.WriteFileAtomic(statePath(s.Name), data, 0644)
+	return fsutil.WithLock(lockPath(), func() error {
+		dir := sandboxDir()
+		_ = os.MkdirAll(dir, 0755)
+		data, err := json.MarshalIndent(s, "", "  ")
+		if err != nil {
+			return err
+		}
+		return fsutil.WriteFileAtomic(statePath(s.Name), data, 0644)
+	})
 }
 
 func LoadState(name string) (*SandboxState, error) {
@@ -76,5 +82,7 @@ func ListStates() ([]*SandboxState, error) {
 }
 
 func DeleteState(name string) error {
-	return os.Remove(statePath(name))
+	return fsutil.WithLock(lockPath(), func() error {
+		return os.Remove(statePath(name))
+	})
 }

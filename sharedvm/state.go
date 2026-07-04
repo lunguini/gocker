@@ -28,14 +28,20 @@ var statePath = func() string {
 	return filepath.Join(stateDir(), "state.json")
 }
 
+func lockPath() string {
+	return filepath.Join(stateDir(), ".lock")
+}
+
 func SaveVMState(s *VMState) error {
-	dir := stateDir()
-	_ = os.MkdirAll(dir, 0755)
-	data, err := json.MarshalIndent(s, "", "  ")
-	if err != nil {
-		return err
-	}
-	return fsutil.WriteFileAtomic(statePath(), data, 0644)
+	return fsutil.WithLock(lockPath(), func() error {
+		dir := stateDir()
+		_ = os.MkdirAll(dir, 0755)
+		data, err := json.MarshalIndent(s, "", "  ")
+		if err != nil {
+			return err
+		}
+		return fsutil.WriteFileAtomic(statePath(), data, 0644)
+	})
 }
 
 func LoadVMState() (*VMState, error) {
@@ -51,5 +57,7 @@ func LoadVMState() (*VMState, error) {
 }
 
 func DeleteVMState() error {
-	return os.RemoveAll(stateDir())
+	return fsutil.WithLock(lockPath(), func() error {
+		return os.RemoveAll(stateDir())
+	})
 }

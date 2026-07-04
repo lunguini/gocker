@@ -20,14 +20,20 @@ func statePath(name string) string {
 	return filepath.Join(projectDir(name), "state.json")
 }
 
+func lockPath() string {
+	return filepath.Join(fsutil.HomeDir(), ".gocker", "compose.lock")
+}
+
 func SaveProject(p *ProjectState) error {
-	dir := projectDir(p.Name)
-	_ = os.MkdirAll(dir, 0755)
-	data, err := json.MarshalIndent(p, "", "  ")
-	if err != nil {
-		return err
-	}
-	return fsutil.WriteFileAtomic(statePath(p.Name), data, 0644)
+	return fsutil.WithLock(lockPath(), func() error {
+		dir := projectDir(p.Name)
+		_ = os.MkdirAll(dir, 0755)
+		data, err := json.MarshalIndent(p, "", "  ")
+		if err != nil {
+			return err
+		}
+		return fsutil.WriteFileAtomic(statePath(p.Name), data, 0644)
+	})
 }
 
 func LoadProject(name string) (*ProjectState, error) {
@@ -43,5 +49,7 @@ func LoadProject(name string) (*ProjectState, error) {
 }
 
 func DeleteProject(name string) error {
-	return os.RemoveAll(projectDir(name))
+	return fsutil.WithLock(lockPath(), func() error {
+		return os.RemoveAll(projectDir(name))
+	})
 }
