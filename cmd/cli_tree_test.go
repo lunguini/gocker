@@ -188,11 +188,13 @@ func buildTestRoot(t *testing.T) *cli.Command {
 // and succeed; the test detects that success as a failure.
 func newPermissiveMockRuntime() *engine.MockRuntime {
 	return &engine.MockRuntime{
-		ValidateFunc:          func() error { return nil },
-		BinaryPathFunc:        func() string { return "/mock/binary" },
-		ExecFunc:              func(ctx context.Context, args ...string) ([]byte, []byte, error) { return nil, nil, nil },
-		ExecInteractiveFunc:   func(ctx context.Context, args ...string) error { return nil },
-		ExecStreamFunc:        func(ctx context.Context, args ...string) (io.ReadCloser, error) { return io.NopCloser(strings.NewReader("")), nil },
+		ValidateFunc:        func() error { return nil },
+		BinaryPathFunc:      func() string { return "/mock/binary" },
+		ExecFunc:            func(ctx context.Context, args ...string) ([]byte, []byte, error) { return nil, nil, nil },
+		ExecInteractiveFunc: func(ctx context.Context, args ...string) error { return nil },
+		ExecStreamFunc: func(ctx context.Context, args ...string) (io.ReadCloser, error) {
+			return io.NopCloser(strings.NewReader("")), nil
+		},
 		ContainerRunFunc:      func(ctx context.Context, args []string, interactive bool) error { return nil },
 		ContainerListFunc:     func(ctx context.Context, all bool) ([]engine.ContainerInfo, error) { return nil, nil },
 		ContainerStopFunc:     func(ctx context.Context, nameOrID string) error { return nil },

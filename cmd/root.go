@@ -57,9 +57,9 @@ func NewApp(version string) *cli.Command {
 	}
 
 	return &cli.Command{
-		Name:                  "gocker",
-		Usage:                 "Docker-compatible CLI for Apple Container on macOS",
-		Version:               version,
+		Name:                   "gocker",
+		Usage:                  "Docker-compatible CLI for Apple Container on macOS",
+		Version:                version,
 		EnableShellCompletion:  true,
 		UseShortOptionHandling: true,
 		Flags: []cli.Flag{
@@ -74,7 +74,7 @@ func NewApp(version string) *cli.Command {
 			},
 			&cli.StringFlag{
 				Name:  "isolation",
-				Usage: "Isolation mode: full, hybrid, shared",
+				Usage: "Isolation mode: full, hybrid, shared (compose only; other commands read ~/.gocker/config.yaml)",
 			},
 		},
 		Before: func(ctx context.Context, cmd *cli.Command) (context.Context, error) {
@@ -83,10 +83,22 @@ func NewApp(version string) *cli.Command {
 				return ctx, nil
 			}
 
-			// Warn if sandbox isolation is downgraded
-			cliIsolation := cmd.String("isolation")
-			if first == "sandbox" && cfg.IsolationFor("sandbox", cliIsolation) == "shared" {
-				fmt.Fprintln(os.Stderr, "⚠ Running sandbox in shared isolation mode. Agent has kernel-level access to other containers. Use --isolation full for hardware isolation.")
+			// --isolation only takes effect for `compose` today: runtimes for
+			// every other command are built once in NewApp, before flags are
+			// parsed, so re-resolving them here would require plumbing a
+			// mutable runtime indirection through every command constructor.
+			// Rather than silently ignore the flag (H5), refuse explicitly so
+			// users aren't misled into thinking it took effect; ~/.gocker/config.yaml
+			// is the supported way to change isolation mode for these commands.
+			if cmd.IsSet("isolation") && first != "compose" {
+				return ctx, cli.Exit(fmt.Sprintf("--isolation is not yet supported for %q commands (only `gocker compose`); set \"isolation\" in ~/.gocker/config.yaml instead", first), 1)
+			}
+
+			// Warn if sandbox isolation is downgraded. --isolation can't
+			// reach here for "sandbox" (rejected above), so only the
+			// config-file mode is relevant.
+			if first == "sandbox" && cfg.IsolationFor("sandbox", "") == "shared" {
+				fmt.Fprintln(os.Stderr, "⚠ Running sandbox in shared isolation mode. Agent has kernel-level access to other containers. Use \"isolation: full\" in ~/.gocker/config.yaml for hardware isolation.")
 			}
 
 			if err := appleRT.Validate(); err != nil {
@@ -105,7 +117,7 @@ func NewApp(version string) *cli.Command {
 		Commands: []*cli.Command{
 			newAICmd(generalRT),
 			newBuildCmd(generalRT),
-			newComposeCmd(appleRT), // compose proxies to nerdctl inside a VM
+			newComposeCmd(appleRT),  // compose proxies to nerdctl inside a VM
 			newDaemonCmd(generalRT), // uses SharedVMRuntime in shared/hybrid mode
 			newDoctorCmd(),
 			newExecCmd(generalRT),

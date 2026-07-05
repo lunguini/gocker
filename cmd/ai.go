@@ -85,7 +85,7 @@ gocker volume rm NAME                  Remove a volume
 ## AI Agent Sandboxing
 
 gocker sandbox run AGENT [WORKSPACE]   Create and run agent sandbox
-  AGENT: claude, codex, or custom
+  AGENT: claude or custom
   WORKSPACE: directory to mount (default: current dir)
   -d                    Run in background
   --name NAME           Custom sandbox name
@@ -120,7 +120,8 @@ sharedVM:
 ## Global flags
 
 --format json                          JSON output on any command
---isolation MODE                       Override isolation mode
+--isolation MODE                       Override isolation mode (compose only; other
+                                        commands error and point at config.yaml)
 --debug                                Debug output
 
 ## Common patterns

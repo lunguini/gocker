@@ -65,11 +65,11 @@ func TestParseChoice(t *testing.T) {
 func TestIsQuitInput(t *testing.T) {
 	quit := []string{
 		"q", "Q", "quit", "QUIT", "exit", "Exit",
-		"\x1b",       // bare Esc then Enter
-		"\x1b\x1b",   // Meta-Esc variant some terminals send
-		" q ",        // with whitespace
-		"\t\x1b\n",   // extra whitespace + Esc (trim-space will remove the \n,
-		              // actually readLine already strips the \n; this checks robustness)
+		"\x1b",     // bare Esc then Enter
+		"\x1b\x1b", // Meta-Esc variant some terminals send
+		" q ",      // with whitespace
+		"\t\x1b\n", // extra whitespace + Esc (trim-space will remove the \n,
+		// actually readLine already strips the \n; this checks robustness)
 	}
 	for _, s := range quit {
 		if !isQuitInput(s) {

@@ -16,13 +16,6 @@ var builtinTemplates = map[string]*AgentTemplate{
 		EnvVars:     []string{"ANTHROPIC_API_KEY"},
 		DefaultArgs: []string{},
 	},
-	"codex": {
-		Name:        "codex",
-		Image:       "ubuntu:24.04",
-		EntryCmd:    []string{"codex", "--full-auto"},
-		EnvVars:     []string{"OPENAI_API_KEY"},
-		DefaultArgs: []string{},
-	},
 }
 
 func GetTemplate(agent string) *AgentTemplate {

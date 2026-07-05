@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -19,6 +20,42 @@ import (
 
 func gockerDir() string {
 	return filepath.Join(fsutil.HomeDir(), ".gocker")
+}
+
+// readDaemonPID reads and parses the daemon pidfile, returning ok=false if
+// the file is missing or unparsable.
+func readDaemonPID(pidPath string) (pid int, ok bool) {
+	data, err := os.ReadFile(pidPath)
+	if err != nil {
+		return 0, false
+	}
+	pid, err = strconv.Atoi(strings.TrimSpace(string(data)))
+	if err != nil {
+		return 0, false
+	}
+	return pid, true
+}
+
+// daemonProcessAlive reports whether pid refers to a live process, using a
+// signal-0 probe (same check `daemon status` already relies on).
+func daemonProcessAlive(pid int) bool {
+	proc, err := os.FindProcess(pid)
+	if err != nil {
+		return false
+	}
+	return proc.Signal(syscall.Signal(0)) == nil
+}
+
+// daemonProcessLooksLikeGocker is a best-effort identity check to avoid
+// signaling an unrelated process that has reused the pid (e.g. after a
+// reboot). It is not foolproof, but it's a cheap guard with no extra deps.
+func daemonProcessLooksLikeGocker(pid int) bool {
+	out, err := exec.Command("ps", "-p", strconv.Itoa(pid), "-o", "comm=").Output()
+	if err != nil {
+		return false
+	}
+	name := strings.ToLower(strings.TrimSpace(string(out)))
+	return strings.Contains(name, "gocker")
 }
 
 func newDaemonCmd(eng engine.Runtime) *cli.Command {
@@ -43,9 +80,15 @@ func newDaemonCmd(eng engine.Runtime) *cli.Command {
 					}
 					pidPath := filepath.Join(dir, "daemon.pid")
 
+					if existingPID, ok := readDaemonPID(pidPath); ok && daemonProcessAlive(existingPID) {
+						return fmt.Errorf("daemon already running (pid %d); run 'gocker daemon stop' first", existingPID)
+					}
+
 					if cmd.Bool("foreground") {
 						pid := os.Getpid()
-						_ = os.WriteFile(pidPath, []byte(strconv.Itoa(pid)), 0644)
+						if err := fsutil.WriteFileAtomic(pidPath, []byte(strconv.Itoa(pid)), 0644); err != nil {
+							return fmt.Errorf("writing pid file: %w", err)
+						}
 						defer func() { _ = os.Remove(pidPath) }()
 						defer func() { _ = os.Remove(socketPath) }()
 
@@ -64,7 +107,7 @@ func newDaemonCmd(eng engine.Runtime) *cli.Command {
 							fmt.Fprintln(os.Stderr)
 						}
 
-						srv := api.NewServer(eng, socketPath)
+						srv := api.NewServer(eng, socketPath, cmd.Root().Version)
 						srv.SetLogger(logger)
 						return srv.ListenAndServe(ctx)
 					}
@@ -101,13 +144,18 @@ func newDaemonCmd(eng engine.Runtime) *cli.Command {
 				Usage: "Stop the API daemon",
 				Action: func(ctx context.Context, cmd *cli.Command) error {
 					pidPath := filepath.Join(gockerDir(), "daemon.pid")
-					data, err := os.ReadFile(pidPath)
-					if err != nil {
+					pid, ok := readDaemonPID(pidPath)
+					if !ok {
 						return fmt.Errorf("daemon not running (no pid file)")
 					}
-					pid, err := strconv.Atoi(strings.TrimSpace(string(data)))
-					if err != nil {
-						return fmt.Errorf("invalid pid file")
+					if !daemonProcessAlive(pid) {
+						_ = os.Remove(pidPath)
+						return fmt.Errorf("daemon not running (stale pid file removed)")
+					}
+					// Guard against PID reuse (e.g. after a reboot): refuse to
+					// signal a process that no longer looks like gocker.
+					if !daemonProcessLooksLikeGocker(pid) {
+						return fmt.Errorf("pid %d in %s does not look like a gocker process (possible pid reuse); refusing to signal it — remove the pid file manually if you're sure the daemon isn't running", pid, pidPath)
 					}
 					proc, err := os.FindProcess(pid)
 					if err != nil {
@@ -126,22 +174,12 @@ func newDaemonCmd(eng engine.Runtime) *cli.Command {
 				Usage: "Show daemon status",
 				Action: func(ctx context.Context, cmd *cli.Command) error {
 					pidPath := filepath.Join(gockerDir(), "daemon.pid")
-					data, err := os.ReadFile(pidPath)
-					if err != nil {
+					pid, ok := readDaemonPID(pidPath)
+					if !ok {
 						fmt.Println("Daemon is not running")
 						return nil
 					}
-					pid, err := strconv.Atoi(strings.TrimSpace(string(data)))
-					if err != nil {
-						fmt.Println("Daemon is not running (invalid pid file)")
-						return nil
-					}
-					proc, err := os.FindProcess(pid)
-					if err != nil {
-						fmt.Println("Daemon is not running")
-						return nil
-					}
-					if err := proc.Signal(syscall.Signal(0)); err != nil {
+					if !daemonProcessAlive(pid) {
 						fmt.Println("Daemon is not running (stale pid file)")
 						return nil
 					}

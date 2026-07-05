@@ -10,13 +10,13 @@ import (
 
 func TestIsInUseError(t *testing.T) {
 	cases := map[string]bool{
-		"":                                         false,
-		"some unrelated failure":                   false,
-		"network X has active endpoints":           true,
-		"Error: image is in use by container":      true,
-		"volume is being used by a container":      true,
-		"image has dependent child images":         true,
-		"ERROR: ... IN USE ...":                    true, // case-insensitive
+		"":                                    false,
+		"some unrelated failure":              false,
+		"network X has active endpoints":      true,
+		"Error: image is in use by container": true,
+		"volume is being used by a container": true,
+		"image has dependent child images":    true,
+		"ERROR: ... IN USE ...":               true, // case-insensitive
 		// Apple Container CLI's opaque prune-time wrapper — we accept it as
 		// a soft skip because the backend was right to refuse, but the
 		// message doesn't tell us why.
@@ -24,7 +24,7 @@ func TestIsInUseError(t *testing.T) {
 		// Apple CLI's in-use refusal for a single named network — observed
 		// when a container still references a compose project's network.
 		`failed to delete network: ["id": proxy_proxy, "error": invalidState: "cannot delete subnet proxy_proxy with referring containers: backend-redis-1"]`: true,
-		`delete failed for one or more networks: ["proxy_proxy"]: exit status 1`:                                                                               true,
+		`delete failed for one or more networks: ["proxy_proxy"]: exit status 1`:                                                                              true,
 	}
 	for msg, want := range cases {
 		var err error
@@ -91,10 +91,10 @@ func TestPruneImages_DanglingOnly(t *testing.T) {
 	rt := &engine.MockRuntime{
 		ImageListFunc: func(ctx context.Context) ([]engine.ImageInfo, error) {
 			return []engine.ImageInfo{
-				{ID: "1", Name: "nginx", Tag: "1.25"},          // not dangling
-				{ID: "2", Name: "<none>", Tag: "<none>"},        // dangling
-				{ID: "3", Name: "alpine", Tag: "3"},             // not dangling
-				{ID: "4", Name: "", Tag: "1.0"},                 // dangling (no repo)
+				{ID: "1", Name: "nginx", Tag: "1.25"},    // not dangling
+				{ID: "2", Name: "<none>", Tag: "<none>"}, // dangling
+				{ID: "3", Name: "alpine", Tag: "3"},      // not dangling
+				{ID: "4", Name: "", Tag: "1.0"},          // dangling (no repo)
 			}, nil
 		},
 		ImageRemoveFunc: func(ctx context.Context, ref string) error { return nil },
@@ -115,6 +115,9 @@ func TestPruneImages_AllRemovesEverything(t *testing.T) {
 				{ID: "2", Name: "alpine", Tag: "3"},
 			}, nil
 		},
+		ContainerListFunc: func(ctx context.Context, all bool) ([]engine.ContainerInfo, error) {
+			return nil, nil
+		},
 		ImageRemoveFunc: func(ctx context.Context, ref string) error { return nil },
 	}
 
@@ -122,6 +125,41 @@ func TestPruneImages_AllRemovesEverything(t *testing.T) {
 
 	if len(report.removed) != 2 {
 		t.Errorf("removed wrong count: got %d (%v)", len(report.removed), report.removed)
+	}
+}
+
+func TestPruneImages_AllSkipsImagesReferencedByStoppedContainers(t *testing.T) {
+	var removed []string
+	rt := &engine.MockRuntime{
+		ImageListFunc: func(ctx context.Context) ([]engine.ImageInfo, error) {
+			return []engine.ImageInfo{
+				{ID: "1", Name: "nginx", Tag: "1.25"}, // referenced by a stopped container
+				{ID: "2", Name: "alpine", Tag: "3"},   // unreferenced
+			}, nil
+		},
+		ContainerListFunc: func(ctx context.Context, all bool) ([]engine.ContainerInfo, error) {
+			// nerdctl would let us delete this even though a stopped
+			// container still references it — the cross-check must catch
+			// what the backend won't (M9).
+			return []engine.ContainerInfo{
+				{ID: "c1", Name: "old", Image: "nginx:1.25", State: "exited"},
+			}, nil
+		},
+		ImageRemoveFunc: func(ctx context.Context, ref string) error {
+			removed = append(removed, ref)
+			return nil
+		},
+	}
+
+	report := pruneImages(context.Background(), rt, true)
+
+	if len(report.removed) != 1 || report.removed[0] != "alpine:3" {
+		t.Errorf("expected only alpine:3 removed, got %v", report.removed)
+	}
+	for _, ref := range removed {
+		if ref == "nginx:1.25" {
+			t.Error("image referenced by a stopped container must not be removed")
+		}
 	}
 }
 

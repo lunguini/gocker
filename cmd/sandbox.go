@@ -27,8 +27,8 @@ func newSandboxCmd(eng engine.Runtime) *cli.Command {
 				ArgsUsage: "AGENT [WORKSPACE]",
 				Flags: []cli.Flag{
 					&cli.StringFlag{Name: "name", Usage: "Custom sandbox name"},
-					&cli.StringFlag{Name: "network-policy", Value: "allow", Usage: "Network policy: allow or deny"},
-					&cli.StringSliceFlag{Name: "allow-host", Usage: "Allowed hosts when policy is deny"},
+					&cli.StringFlag{Name: "network-policy", Value: "allow", Usage: "Network policy: allow (default) or deny. deny is not enforced yet and will error — tracked for a future release"},
+					&cli.StringSliceFlag{Name: "allow-host", Usage: "Allowed hosts (reserved for when --network-policy deny is enforced; has no effect today)"},
 					&cli.StringSliceFlag{Name: "env", Aliases: []string{"e"}, Usage: "Additional environment variables"},
 					&cli.StringFlag{Name: "image", Usage: "Override template image"},
 					&cli.StringFlag{Name: "entrypoint", Usage: "Override entry command"},
@@ -40,7 +40,7 @@ func newSandboxCmd(eng engine.Runtime) *cli.Command {
 				Action: func(ctx context.Context, cmd *cli.Command) error {
 					agent := cmd.Args().First()
 					if agent == "" {
-						return cli.Exit("requires agent name (e.g., claude, codex, custom)", 1)
+						return cli.Exit("requires agent name (e.g., claude, custom)", 1)
 					}
 
 					workspace := cmd.Args().Get(1)
@@ -52,6 +52,14 @@ func newSandboxCmd(eng engine.Runtime) *cli.Command {
 						}
 					}
 					workspace, _ = filepath.Abs(workspace)
+
+					networkPolicy := cmd.String("network-policy")
+					if networkPolicy != "allow" && networkPolicy != "deny" {
+						return cli.Exit(fmt.Sprintf("invalid --network-policy %q: must be \"allow\" or \"deny\"", networkPolicy), 1)
+					}
+					if networkPolicy == "deny" {
+						return cli.Exit("--network-policy deny is not implemented yet: gocker cannot currently restrict sandbox network access, so it refuses to silently grant unrestricted access while claiming otherwise. Enforcement is tracked for a future release; omit the flag (or pass --network-policy allow) to run with unrestricted network access today.", 1)
+					}
 
 					name := cmd.String("name")
 					if name == "" {
@@ -86,7 +94,10 @@ func newSandboxCmd(eng engine.Runtime) *cli.Command {
 					if cmd.Args().Len() > 0 {
 						return cli.Exit("unexpected arguments: "+strings.Join(cmd.Args().Slice(), " "), 2)
 					}
-					sandboxes, err := mgr.List()
+					// Verify live status via a cheap inspect per sandbox rather
+					// than trusting last-known state, which goes stale if a
+					// sandbox exits/crashes outside gocker's control.
+					sandboxes, err := mgr.ListLive(ctx)
 					if err != nil {
 						return err
 					}

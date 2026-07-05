@@ -151,6 +151,12 @@ func pruneUnusedVolumes(ctx context.Context, eng engine.Runtime) pruneReport {
 // dangling images are removed (no tag or repo:<none>). If all=true, every
 // image the backend will let us delete is removed — the backend refuses
 // in-use references, so we skip those errors silently.
+//
+// The backend's own refusal isn't a complete safety net: nerdctl allows
+// deleting an image still referenced by a *stopped* container, which Docker
+// would refuse. So for all=true we additionally cross-check against every
+// container (running or not) and skip images they reference, rather than
+// relying entirely on the backend to catch it (M9).
 func pruneImages(ctx context.Context, eng engine.Runtime, all bool) pruneReport {
 	var r pruneReport
 	imgs, err := eng.ImageList(ctx)
@@ -158,6 +164,16 @@ func pruneImages(ctx context.Context, eng engine.Runtime, all bool) pruneReport 
 		r.errors = append(r.errors, "list images: "+err.Error())
 		return r
 	}
+
+	var inUse map[string]struct{}
+	if all {
+		if containers, err := eng.ContainerList(ctx, true); err == nil {
+			inUse = imagesReferencedByContainers(containers)
+		}
+		// If the container list call fails, fall back to relying on the
+		// backend's own in-use refusal (best-effort, matches prior behavior).
+	}
+
 	for _, img := range imgs {
 		dangling := isDanglingImage(img)
 		if !all && !dangling {
@@ -170,6 +186,9 @@ func pruneImages(ctx context.Context, eng engine.Runtime, all bool) pruneReport 
 		if ref == "" || ref == ":" {
 			ref = img.ID
 		}
+		if all && imageReferencedBy(inUse, img, ref) {
+			continue
+		}
 		if err := eng.ImageRemove(ctx, ref); err != nil {
 			if isInUseError(err) {
 				continue
@@ -180,6 +199,37 @@ func pruneImages(ctx context.Context, eng engine.Runtime, all bool) pruneReport 
 		r.removed = append(r.removed, ref)
 	}
 	return r
+}
+
+// imagesReferencedByContainers collects the image references (as reported
+// by ContainerList, which may be a name, name:tag, or ID depending on
+// backend) used by any container, running or not.
+func imagesReferencedByContainers(containers []engine.ContainerInfo) map[string]struct{} {
+	used := make(map[string]struct{}, len(containers))
+	for _, c := range containers {
+		if c.Image != "" {
+			used[c.Image] = struct{}{}
+		}
+	}
+	return used
+}
+
+// imageReferencedBy reports whether img is referenced by any container,
+// matching on ref (name:tag), bare name, or ID since containers may record
+// any of the three depending on backend.
+func imageReferencedBy(inUse map[string]struct{}, img engine.ImageInfo, ref string) bool {
+	if inUse == nil {
+		return false
+	}
+	for _, candidate := range []string{ref, img.Name, img.ID} {
+		if candidate == "" {
+			continue
+		}
+		if _, ok := inUse[candidate]; ok {
+			return true
+		}
+	}
+	return false
 }
 
 // isDanglingImage returns true if the image has no meaningful repo+tag

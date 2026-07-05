@@ -2,6 +2,9 @@ package cmd
 
 import (
 	"context"
+	"fmt"
+	"os"
+	"strings"
 
 	"github.com/lunguini/gocker/engine"
 	"github.com/urfave/cli/v3"
@@ -20,7 +23,9 @@ func newExecCmd(eng engine.Runtime) *cli.Command {
 			interactive := false
 			var flags []string
 			for len(args) > 0 {
-				switch args[0] {
+				arg := args[0]
+				name, inlineVal, hasInline := strings.Cut(arg, "=")
+				switch name {
 				case "-i":
 					interactive = true
 					flags = append(flags, "-i")
@@ -34,10 +39,15 @@ func newExecCmd(eng engine.Runtime) *cli.Command {
 					flags = append(flags, "-i", "-t")
 					args = args[1:]
 				case "-d", "--detach":
+					fmt.Fprintln(os.Stderr, "Warning: -d/--detach is not supported by gocker exec (ignored, running attached)")
 					args = args[1:]
 				case "-w", "--workdir", "-e", "--env", "-u", "--user":
-					// Pass through flags with values
-					if len(args) > 1 {
+					// Pass through flags with values, accepting both
+					// "--flag value" and "--flag=value" forms.
+					if hasInline {
+						flags = append(flags, name, inlineVal)
+						args = args[1:]
+					} else if len(args) > 1 {
 						flags = append(flags, args[0], args[1])
 						args = args[2:]
 					} else {

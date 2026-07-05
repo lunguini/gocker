@@ -5,11 +5,29 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"regexp"
 	"strings"
 	"time"
 
 	"github.com/lunguini/gocker/engine"
 )
+
+// validSandboxName matches safe sandbox names: no path separators or
+// traversal sequences, so a hostile --name can't escape ~/.gocker/sandboxes/
+// when building state file paths.
+var validSandboxName = regexp.MustCompile(`^[a-zA-Z0-9._-]+$`)
+
+// ValidateName rejects sandbox names that could escape the sandbox state
+// directory (e.g. "../../foo") when used to build a state file path.
+func ValidateName(name string) error {
+	if name == "" {
+		return fmt.Errorf("sandbox name must not be empty")
+	}
+	if !validSandboxName.MatchString(name) || name == "." || name == ".." {
+		return fmt.Errorf("invalid sandbox name %q: only letters, digits, '.', '_', and '-' are allowed", name)
+	}
+	return nil
+}
 
 type Manager struct {
 	eng engine.Runtime
@@ -36,6 +54,10 @@ func NewManager(eng engine.Runtime) *Manager {
 }
 
 func (m *Manager) Run(ctx context.Context, opts RunOptions) error {
+	if err := ValidateName(opts.Name); err != nil {
+		return err
+	}
+
 	// Check if sandbox already exists in our state
 	existing, err := LoadState(opts.Name)
 	if err == nil {
@@ -78,7 +100,7 @@ func (m *Manager) Run(ctx context.Context, opts RunOptions) error {
 		}
 		entryCmd = tmpl.EntryCmd
 	} else if opts.Agent != "custom" {
-		return fmt.Errorf("unknown agent %q (available: claude, codex, custom)", opts.Agent)
+		return fmt.Errorf("unknown agent %q (available: claude, custom)", opts.Agent)
 	}
 
 	if image == "" {
@@ -105,23 +127,35 @@ func (m *Manager) Run(ctx context.Context, opts RunOptions) error {
 	args = append(args, "-v", opts.Workspace+":/workspace")
 	args = append(args, "-w", "/workspace")
 
-	// Always forward TERM so TUI apps render correctly
+	// Always forward TERM so TUI apps render correctly. Not a secret, so a
+	// plain -e is fine — it's argv either way and TERM values aren't
+	// sensitive.
 	if term := os.Getenv("TERM"); term != "" {
 		args = append(args, "-e", "TERM="+term)
 	}
 
-	// Pass required env vars from host
+	// Required env vars from host (e.g. ANTHROPIC_API_KEY) and user-supplied
+	// --env values often carry secrets. Apple's `container run --env-file`
+	// reads a KEY=VALUE file instead of putting them on argv, where they'd
+	// otherwise be visible to every local process via `ps aux` for the
+	// lifetime of this command (C7b). Write them to a 0600 temp file instead.
+	var secretEnvLines []string
 	if tmpl != nil {
 		for _, envName := range tmpl.EnvVars {
 			if val := os.Getenv(envName); val != "" {
-				args = append(args, "-e", envName+"="+val)
+				secretEnvLines = append(secretEnvLines, envName+"="+val)
 			}
 		}
 	}
+	secretEnvLines = append(secretEnvLines, opts.ExtraEnv...)
 
-	// Extra env vars
-	for _, e := range opts.ExtraEnv {
-		args = append(args, "-e", e)
+	if len(secretEnvLines) > 0 {
+		envFile, err := writeSecretEnvFile(secretEnvLines)
+		if err != nil {
+			return fmt.Errorf("writing sandbox env file: %w", err)
+		}
+		defer func() { _ = os.Remove(envFile) }()
+		args = append(args, "--env-file", envFile)
 	}
 
 	// Config sync mounts
@@ -177,8 +211,43 @@ func (m *Manager) Run(ctx context.Context, opts RunOptions) error {
 	return nil
 }
 
+// writeSecretEnvFile writes KEY=VALUE lines to a 0600 temp file for
+// `container run --env-file`, keeping secrets off argv (ps aux visibility).
+// Callers are responsible for removing the returned path once the backend
+// CLI has read it (it's read synchronously during `container run`, so it's
+// safe to remove as soon as ContainerRun returns, detached or not).
+func writeSecretEnvFile(lines []string) (string, error) {
+	f, err := os.CreateTemp("", "gocker-sandbox-env-*")
+	if err != nil {
+		return "", err
+	}
+	path := f.Name()
+	if err := f.Chmod(0600); err != nil {
+		_ = f.Close()
+		_ = os.Remove(path)
+		return "", err
+	}
+	for _, line := range lines {
+		if _, err := f.WriteString(line + "\n"); err != nil {
+			_ = f.Close()
+			_ = os.Remove(path)
+			return "", err
+		}
+	}
+	if err := f.Close(); err != nil {
+		_ = os.Remove(path)
+		return "", err
+	}
+	return path, nil
+}
+
 // getContainerStatus checks the real container status via inspect.
 // Returns "running", "stopped", or "" if the container doesn't exist.
+//
+// Apple's inspect output may be a JSON array or a single object depending on
+// backend/version (see sharedvm.Manager.getContainerStatus for the same
+// tolerant handling) — treating it as object-only here caused a live
+// sandbox to be misread as gone and force-recreated (H4).
 func (m *Manager) getContainerStatus(ctx context.Context, nameOrID string) string {
 	data, err := m.eng.ContainerInspect(ctx, nameOrID)
 	if err != nil {
@@ -186,10 +255,24 @@ func (m *Manager) getContainerStatus(ctx context.Context, nameOrID string) strin
 	}
 	var raw map[string]any
 	if json.Unmarshal(data, &raw) != nil {
-		return ""
+		var arr []map[string]any
+		if json.Unmarshal(data, &arr) == nil && len(arr) > 0 {
+			raw = arr[0]
+		}
 	}
 	if status, ok := raw["status"].(string); ok {
 		return status
+	}
+	// Try nested format (e.g. Apple's "configuration"/"state" wrappers).
+	s := string(data)
+	for _, candidate := range []string{`"status":"`, `"Status":"`} {
+		if idx := strings.Index(s, candidate); idx != -1 {
+			start := idx + len(candidate)
+			end := strings.Index(s[start:], `"`)
+			if end != -1 {
+				return s[start : start+end]
+			}
+		}
 	}
 	return ""
 }
@@ -198,7 +281,31 @@ func (m *Manager) List() ([]*SandboxState, error) {
 	return ListStates()
 }
 
+// ListLive returns sandbox states with Status refreshed against a live
+// container inspect, instead of trusting the last-known value written to
+// disk. `sandbox ls` previously reported "running" forever once a sandbox
+// exited outside gocker's control (crash, `container stop`, host reboot);
+// this keeps the on-disk state untouched (no write here) and just corrects
+// what's displayed.
+func (m *Manager) ListLive(ctx context.Context) ([]*SandboxState, error) {
+	states, err := ListStates()
+	if err != nil {
+		return nil, err
+	}
+	for _, s := range states {
+		if live := m.getContainerStatus(ctx, s.ContainerID); live != "" {
+			s.Status = live
+		} else {
+			s.Status = "gone"
+		}
+	}
+	return states, nil
+}
+
 func (m *Manager) Stop(ctx context.Context, name string) error {
+	if err := ValidateName(name); err != nil {
+		return err
+	}
 	state, err := LoadState(name)
 	if err != nil {
 		return fmt.Errorf("sandbox %q not found", name)
@@ -211,6 +318,9 @@ func (m *Manager) Stop(ctx context.Context, name string) error {
 }
 
 func (m *Manager) Remove(ctx context.Context, name string) error {
+	if err := ValidateName(name); err != nil {
+		return err
+	}
 	state, err := LoadState(name)
 	if err != nil {
 		return fmt.Errorf("sandbox %q not found", name)
@@ -223,6 +333,9 @@ func (m *Manager) Remove(ctx context.Context, name string) error {
 }
 
 func (m *Manager) Attach(ctx context.Context, name string) error {
+	if err := ValidateName(name); err != nil {
+		return err
+	}
 	state, err := LoadState(name)
 	if err != nil {
 		return fmt.Errorf("sandbox %q not found", name)
@@ -236,6 +349,9 @@ func (m *Manager) Attach(ctx context.Context, name string) error {
 }
 
 func (m *Manager) Logs(ctx context.Context, name string, follow bool) error {
+	if err := ValidateName(name); err != nil {
+		return err
+	}
 	state, err := LoadState(name)
 	if err != nil {
 		return fmt.Errorf("sandbox %q not found", name)

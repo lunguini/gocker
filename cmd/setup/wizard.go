@@ -128,4 +128,3 @@ func normalizeMemory(mem, fallback string) string {
 	}
 	return mem
 }
-

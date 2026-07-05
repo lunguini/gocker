@@ -47,22 +47,8 @@ func ClaudeConfigMounts(syncConfig, syncState, managedSettings bool) []ConfigMou
 	return mounts
 }
 
-func CodexConfigMounts(syncConfig, syncState, managedSettings bool) []ConfigMount {
-	home := fsutil.HomeDir()
-	var mounts []ConfigMount
-
-	if syncConfig {
-		mounts = append(mounts,
-			ConfigMount{filepath.Join(home, ".codex"), "/root/.codex", true, true},
-		)
-	}
-
-	return mounts
-}
-
 var agentConfigFuncs = map[string]func(syncConfig, syncState, managedSettings bool) []ConfigMount{
 	"claude": ClaudeConfigMounts,
-	"codex":  CodexConfigMounts,
 }
 
 // SessionSyncMounts returns mounts that sync the host's Claude Code session
