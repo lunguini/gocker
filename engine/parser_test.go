@@ -365,4 +365,36 @@ func TestGetString(t *testing.T) {
 			t.Errorf("getString(m, \"nonexistent\") = %q, want empty string", result)
 		}
 	})
+
+	t.Run("nil value is skipped, falls through to next key", func(t *testing.T) {
+		withNull := map[string]any{"id": nil, "Id": "abc123"}
+		result := getString(withNull, "id", "Id")
+		if result != "abc123" {
+			t.Errorf("getString(withNull, \"id\", \"Id\") = %q, want %q (nil should not shadow a later key)", result, "abc123")
+		}
+	})
+
+	t.Run("nil is the only candidate returns empty, not the literal <nil>", func(t *testing.T) {
+		withNull := map[string]any{"id": nil}
+		result := getString(withNull, "id")
+		if result != "" {
+			t.Errorf("getString(withNull, \"id\") = %q, want empty string", result)
+		}
+	})
+
+	t.Run("integral float formats without exponent or decimal noise", func(t *testing.T) {
+		withNum := map[string]any{"count": float64(12)}
+		result := getString(withNum, "count")
+		if result != "12" {
+			t.Errorf("getString(withNum, \"count\") = %q, want %q", result, "12")
+		}
+	})
+
+	t.Run("fractional float keeps its decimal", func(t *testing.T) {
+		withNum := map[string]any{"ratio": 1.5}
+		result := getString(withNum, "ratio")
+		if result != "1.5" {
+			t.Errorf("getString(withNum, \"ratio\") = %q, want %q", result, "1.5")
+		}
+	})
 }

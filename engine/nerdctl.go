@@ -82,13 +82,9 @@ func (n *NerdctlRuntime) ContainerRun(ctx context.Context, args []string, intera
 	if interactive {
 		return n.ExecInteractive(ctx, cmdArgs...)
 	}
-	stdout, stderr, err := n.Exec(ctx, cmdArgs...)
+	stderr, err := execPassthrough(ctx, n.Binary, cmdArgs...)
 	if err != nil {
-		return wrapRunErr("nerdctl run", cmdArgs, stdout, stderr, err)
-	}
-	out := strings.TrimSpace(string(stdout))
-	if out != "" {
-		fmt.Println(out)
+		return wrapRunErr("nerdctl run", cmdArgs, nil, stderr, err)
 	}
 	return nil
 }
@@ -242,13 +238,9 @@ func (n *NerdctlRuntime) ContainerExec(ctx context.Context, nameOrID string, arg
 		cmdArgs = append(cmdArgs, args...)
 		return n.ExecInteractive(ctx, cmdArgs...)
 	}
-	stdout, stderr, err := n.Exec(ctx, cmdArgs...)
+	stderr, err := execPassthrough(ctx, n.Binary, cmdArgs...)
 	if err != nil {
 		return wrapNerdctlErr(stderr, err)
-	}
-	out := strings.TrimSpace(string(stdout))
-	if out != "" {
-		fmt.Println(out)
 	}
 	return nil
 }
@@ -260,13 +252,9 @@ func (n *NerdctlRuntime) ContainerLogs(ctx context.Context, nameOrID string, opt
 	if opts.Follow {
 		return n.ExecInteractive(ctx, args...)
 	}
-	stdout, stderr, err := n.Exec(ctx, args...)
+	stderr, err := execPassthrough(ctx, n.Binary, args...)
 	if err != nil {
 		return wrapNerdctlErr(stderr, err)
-	}
-	out := string(stdout) + string(stderr)
-	if out != "" {
-		fmt.Print(out)
 	}
 	return nil
 }
@@ -330,10 +318,12 @@ func ParseNerdctlImageList(data []byte) ([]ImageInfo, error) {
 		// qualified form, so prefer Name — otherwise /images/{name}/json
 		// returns 404 for perfectly pulled images and compose bails with
 		// "image not found".
+		size := getString(obj, "Size", "size")
 		info := ImageInfo{
-			ID:   getString(obj, "ID", "id"),
-			Tag:  getString(obj, "Tag", "tag"),
-			Size: getString(obj, "Size", "size"),
+			ID:        getString(obj, "ID", "id"),
+			Tag:       getString(obj, "Tag", "tag"),
+			Size:      size,
+			SizeBytes: parseSizeString(size),
 		}
 		if full := getString(obj, "Name", "name"); full != "" {
 			// Strip the trailing :tag (if any) so Name holds just the repo

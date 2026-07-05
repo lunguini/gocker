@@ -126,12 +126,13 @@ func parseImageListJSON(data []byte) ([]ImageInfo, error) {
 		}
 
 		info := ImageInfo{
-			ID:     getString(img, "id", "ID", "Id"),
-			Name:   name,
-			Tag:    tag,
-			Digest: digest,
-			Size:   size,
-			Arch:   getString(img, "arch", "Arch", "architecture", "Architecture"),
+			ID:        getString(img, "id", "ID", "Id"),
+			Name:      name,
+			Tag:       tag,
+			Digest:    digest,
+			Size:      size,
+			SizeBytes: parseSizeString(size),
+			Arch:      getString(img, "arch", "Arch", "architecture", "Architecture"),
 		}
 		if info.ID == "" && digest != "" {
 			info.ID = digest
@@ -144,6 +145,77 @@ func parseImageListJSON(data []byte) ([]ImageInfo, error) {
 		result = append(result, info)
 	}
 	return result, nil
+}
+
+// parseSizeString converts a human-readable image size into bytes. Apple's
+// container CLI reports sizes like "28,9 MB" — decimal units with a comma
+// decimal separator (likely locale-influenced formatting from Swift/ICU).
+// nerdctl reports sizes like "28.9MB" (decimal) or "1.2GiB" (binary), dot
+// decimal separator, no space before the unit. Both shapes are handled here;
+// unparseable input returns 0 (callers already keep the raw string in
+// ImageInfo.Size for display).
+func parseSizeString(s string) int64 {
+	s = strings.TrimSpace(s)
+	if s == "" {
+		return 0
+	}
+
+	i := 0
+	for i < len(s) {
+		c := s[i]
+		if (c >= '0' && c <= '9') || c == '.' || c == ',' {
+			i++
+			continue
+		}
+		break
+	}
+	numPart := s[:i]
+	unit := strings.TrimSpace(s[i:])
+	if numPart == "" {
+		return 0
+	}
+	// Apple's comma decimal separator only ever appears once, with no
+	// thousands grouping in observed output — safe to normalize to a dot.
+	numPart = strings.Replace(numPart, ",", ".", 1)
+	value, err := strconv.ParseFloat(numPart, 64)
+	if err != nil {
+		return 0
+	}
+
+	const (
+		kb = 1000
+		mb = kb * 1000
+		gb = mb * 1000
+		tb = gb * 1000
+		ki = 1024
+		mi = ki * 1024
+		gi = mi * 1024
+		ti = gi * 1024
+	)
+	var multiplier float64
+	switch strings.ToLower(unit) {
+	case "", "b", "byte", "bytes":
+		multiplier = 1
+	case "kb":
+		multiplier = kb
+	case "kib":
+		multiplier = ki
+	case "mb":
+		multiplier = mb
+	case "mib":
+		multiplier = mi
+	case "gb":
+		multiplier = gb
+	case "gib":
+		multiplier = gi
+	case "tb":
+		multiplier = tb
+	case "tib":
+		multiplier = ti
+	default:
+		return 0
+	}
+	return int64(value * multiplier)
 }
 
 // parseReference splits a full image reference like "docker.io/library/ubuntu:24.04"

@@ -9,34 +9,34 @@ import (
 // Each method delegates to its corresponding function field.
 // If a field is nil the method panics, except BinaryPath which returns "/mock/binary".
 type MockRuntime struct {
-	ValidateFunc           func() error
-	BinaryPathFunc         func() string
-	ExecFunc               func(ctx context.Context, args ...string) ([]byte, []byte, error)
-	ExecInteractiveFunc    func(ctx context.Context, args ...string) error
-	ExecStreamFunc         func(ctx context.Context, args ...string) (io.ReadCloser, error)
-	ContainerRunFunc       func(ctx context.Context, args []string, interactive bool) error
-	ContainerListFunc      func(ctx context.Context, all bool) ([]ContainerInfo, error)
-	ContainerStopFunc      func(ctx context.Context, nameOrID string) error
-	ContainerStartFunc     func(ctx context.Context, nameOrID string) error
-	ContainerRemoveFunc    func(ctx context.Context, nameOrID string, force bool) error
-	ContainerExecFunc      func(ctx context.Context, nameOrID string, args []string, interactive bool) error
-	ContainerLogsFunc      func(ctx context.Context, nameOrID string, opts LogsOptions) error
-	ContainerInspectFunc   func(ctx context.Context, nameOrID string) ([]byte, error)
-	ImagePullFunc          func(ctx context.Context, image string, opts ImagePullOpts) error
-	ImagePushFunc          func(ctx context.Context, image string) error
-	ImageListFunc          func(ctx context.Context) ([]ImageInfo, error)
-	ImageRemoveFunc        func(ctx context.Context, image string) error
-	ImageBuildFunc         func(ctx context.Context, args []string) error
-	NetworkCreateFunc      func(ctx context.Context, name string, labels map[string]string) error
-	NetworkListFunc        func(ctx context.Context) ([]NetworkInfo, error)
-	NetworkRemoveFunc      func(ctx context.Context, name string) error
-	NetworkConnectFunc     func(ctx context.Context, network, container string) error
-	NetworkDisconnectFunc  func(ctx context.Context, network, container string) error
-	NetworkInspectFunc     func(ctx context.Context, name string) ([]byte, error)
-	VolumeCreateFunc       func(ctx context.Context, name string) error
-	VolumeListFunc         func(ctx context.Context) ([]VolumeInfo, error)
-	VolumeRemoveFunc       func(ctx context.Context, name string) error
-	VolumeInspectFunc      func(ctx context.Context, name string) ([]byte, error)
+	ValidateFunc          func() error
+	BinaryPathFunc        func() string
+	ExecFunc              func(ctx context.Context, args ...string) ([]byte, []byte, error)
+	ExecInteractiveFunc   func(ctx context.Context, args ...string) error
+	ExecStreamFunc        func(ctx context.Context, args ...string) (io.ReadCloser, error)
+	ContainerRunFunc      func(ctx context.Context, args []string, interactive bool) error
+	ContainerListFunc     func(ctx context.Context, all bool) ([]ContainerInfo, error)
+	ContainerStopFunc     func(ctx context.Context, nameOrID string) error
+	ContainerStartFunc    func(ctx context.Context, nameOrID string) error
+	ContainerRemoveFunc   func(ctx context.Context, nameOrID string, force bool) error
+	ContainerExecFunc     func(ctx context.Context, nameOrID string, args []string, interactive bool) error
+	ContainerLogsFunc     func(ctx context.Context, nameOrID string, opts LogsOptions) error
+	ContainerInspectFunc  func(ctx context.Context, nameOrID string) ([]byte, error)
+	ImagePullFunc         func(ctx context.Context, image string, opts ImagePullOpts) error
+	ImagePushFunc         func(ctx context.Context, image string) error
+	ImageListFunc         func(ctx context.Context) ([]ImageInfo, error)
+	ImageRemoveFunc       func(ctx context.Context, image string) error
+	ImageBuildFunc        func(ctx context.Context, args []string) error
+	NetworkCreateFunc     func(ctx context.Context, name string, labels map[string]string) error
+	NetworkListFunc       func(ctx context.Context) ([]NetworkInfo, error)
+	NetworkRemoveFunc     func(ctx context.Context, name string) error
+	NetworkConnectFunc    func(ctx context.Context, network, container string) error
+	NetworkDisconnectFunc func(ctx context.Context, network, container string) error
+	NetworkInspectFunc    func(ctx context.Context, name string) ([]byte, error)
+	VolumeCreateFunc      func(ctx context.Context, name string) error
+	VolumeListFunc        func(ctx context.Context) ([]VolumeInfo, error)
+	VolumeRemoveFunc      func(ctx context.Context, name string) error
+	VolumeInspectFunc     func(ctx context.Context, name string) ([]byte, error)
 }
 
 // Compile-time check that MockRuntime implements Runtime.

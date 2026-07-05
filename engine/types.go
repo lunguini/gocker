@@ -21,13 +21,19 @@ type ContainerInfo struct {
 }
 
 type ImageInfo struct {
-	ID      string
-	Name    string
-	Tag     string
-	Digest  string
-	Size    string
-	Created time.Time
-	Arch    string
+	ID     string
+	Name   string
+	Tag    string
+	Digest string
+	// Size is the backend's raw human-readable size string (e.g. "28,9 MB",
+	// "1.2GiB") — kept verbatim for backward compat with anything already
+	// displaying it. SizeBytes is the parsed numeric value in bytes (0 if
+	// the string couldn't be parsed); prefer it for anything that computes
+	// or compares sizes (e.g. the Docker API, which requires an integer).
+	Size      string
+	SizeBytes int64
+	Created   time.Time
+	Arch      string
 }
 
 type NetworkInfo struct {

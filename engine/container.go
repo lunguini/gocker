@@ -4,6 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"math"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -13,13 +15,9 @@ func (e *Engine) ContainerRun(ctx context.Context, args []string, interactive bo
 	if interactive {
 		return e.ExecInteractive(ctx, cmdArgs...)
 	}
-	stdout, stderr, err := e.Exec(ctx, cmdArgs...)
+	stderr, err := execPassthrough(ctx, e.Binary, cmdArgs...)
 	if err != nil {
 		return cliError(stderr, err)
-	}
-	out := strings.TrimSpace(string(stdout))
-	if out != "" {
-		fmt.Println(out)
 	}
 	return nil
 }
@@ -114,11 +112,25 @@ func containerInfoFromNested(c map[string]any) ContainerInfo {
 	return info
 }
 
+// getString looks up the first of keys present in m with a non-null value
+// and renders it as a string. A key present with a JSON null value is
+// skipped rather than returned as the literal "<nil>" — the next candidate
+// key is checked instead. Numbers are formatted without exponent/decimal
+// noise (json.Unmarshal decodes all JSON numbers as float64, so an integral
+// ID like 12 would otherwise render as "1.2e+01"-style text via %v).
 func getString(m map[string]any, keys ...string) string {
 	for _, k := range keys {
-		if v, ok := m[k]; ok {
-			return fmt.Sprintf("%v", v)
+		v, ok := m[k]
+		if !ok || v == nil {
+			continue
 		}
+		if f, ok := v.(float64); ok {
+			if f == math.Trunc(f) && !math.IsInf(f, 0) {
+				return strconv.FormatFloat(f, 'f', -1, 64)
+			}
+			return strconv.FormatFloat(f, 'g', -1, 64)
+		}
+		return fmt.Sprintf("%v", v)
 	}
 	return ""
 }
@@ -155,13 +167,9 @@ func (e *Engine) ContainerExec(ctx context.Context, nameOrID string, args []stri
 	if interactive {
 		return e.ExecInteractive(ctx, cmdArgs...)
 	}
-	stdout, stderr, err := e.Exec(ctx, cmdArgs...)
+	stderr, err := execPassthrough(ctx, e.Binary, cmdArgs...)
 	if err != nil {
 		return cliError(stderr, err)
-	}
-	out := strings.TrimSpace(string(stdout))
-	if out != "" {
-		fmt.Println(out)
 	}
 	return nil
 }
@@ -173,13 +181,9 @@ func (e *Engine) ContainerLogs(ctx context.Context, nameOrID string, opts LogsOp
 	if opts.Follow {
 		return e.ExecInteractive(ctx, args...)
 	}
-	stdout, stderr, err := e.Exec(ctx, args...)
+	stderr, err := execPassthrough(ctx, e.Binary, args...)
 	if err != nil {
 		return cliError(stderr, err)
-	}
-	out := string(stdout) + string(stderr)
-	if out != "" {
-		fmt.Print(out)
 	}
 	return nil
 }

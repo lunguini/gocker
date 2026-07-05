@@ -50,6 +50,7 @@ func (e *Engine) EnsureSystemRunning(ctx context.Context) error {
 	// The status message may appear on stdout or stderr depending on the version.
 	combined := string(stdout) + string(stderr)
 	if !strings.Contains(combined, "not running") && !strings.Contains(combined, "XPC") && !strings.Contains(combined, "Connection invalid") {
+		debugLog("EnsureSystemRunning: unrecognized probe failure, not auto-starting: %s", combined)
 		return nil // Different error — let it surface naturally later.
 	}
 
@@ -66,6 +67,16 @@ func (e *Engine) EnsureSystemRunning(ctx context.Context) error {
 		time.Sleep(time.Second)
 	}
 	return fmt.Errorf("container system service started but is not responding — try 'container system start' manually")
+}
+
+// debugLog writes a diagnostic line to stderr when GOCKER_DEBUG is set in
+// the environment. Used for field diagnosis of swallowed probe output that
+// would otherwise be silently discarded (see EnsureSystemRunning).
+func debugLog(format string, args ...any) {
+	if os.Getenv("GOCKER_DEBUG") == "" {
+		return
+	}
+	fmt.Fprintf(os.Stderr, "[gocker debug] "+format+"\n", args...)
 }
 
 func (e *Engine) Exec(ctx context.Context, args ...string) ([]byte, []byte, error) {
@@ -119,6 +130,23 @@ func (e *Engine) execInteractiveTee(ctx context.Context, args ...string) error {
 	return nil
 }
 
+// execPassthrough runs a command with stdout streamed live to the process's
+// real stdout (untouched — no TrimSpace, no corruption of binary output) and
+// stderr teed to both the process's real stderr (so it's never silently
+// swallowed on success) and a buffer (so callers can still classify failures
+// via cliError/wrapRunErr). Shared by Engine and NerdctlRuntime, whose
+// non-interactive Container{Run,Exec,Logs} methods previously buffered
+// stdout, TrimSpace'd it, and Println'd it — dropping stderr on success and
+// merging it into stdout in ContainerLogs.
+func execPassthrough(ctx context.Context, binary string, args ...string) ([]byte, error) {
+	var stderrBuf bytes.Buffer
+	cmd := exec.CommandContext(ctx, binary, args...)
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = io.MultiWriter(os.Stderr, &stderrBuf)
+	err := cmd.Run()
+	return stderrBuf.Bytes(), err
+}
+
 func (e *Engine) ExecStream(ctx context.Context, args ...string) (io.ReadCloser, error) {
 	cmd := exec.CommandContext(ctx, e.Binary, args...)
 	stdout, err := cmd.StdoutPipe()
@@ -159,27 +187,51 @@ type sharedCmd struct {
 	cmd       *exec.Cmd
 	mu        sync.Mutex
 	remaining int
+	waitOnce  sync.Once
+	waitErr   error
+}
+
+// closeOne records one reader's Close and reaps the process (cmd.Wait)
+// exactly once, the first time remaining hits zero. sync.Once guards the
+// Wait call itself so it's safe even if remaining is (incorrectly) driven
+// below zero by a caller that closes a reader more times than it should.
+func (s *sharedCmd) closeOne() error {
+	s.mu.Lock()
+	s.remaining--
+	last := s.remaining <= 0
+	s.mu.Unlock()
+	if last {
+		s.waitOnce.Do(func() {
+			s.waitErr = s.cmd.Wait()
+		})
+		return s.waitErr
+	}
+	return nil
 }
 
 type splitReader struct {
-	shared *sharedCmd
-	reader io.ReadCloser
+	shared    *sharedCmd
+	reader    io.ReadCloser
+	closeOnce sync.Once
+	closeErr  error
 }
 
 func (s *splitReader) Read(p []byte) (int, error) {
 	return s.reader.Read(p)
 }
 
+// Close is idempotent — safe to call more than once on the same reader,
+// and safe to call on either of the pair independently, in any order.
+// The underlying process is reaped (cmd.Wait) exactly once, after BOTH
+// returned readers have had Close called at least once. Closing only one
+// of the pair leaks the process as a zombie once it exits: callers of
+// ExecStreamSplit MUST close both readers, even if only one is read from.
 func (s *splitReader) Close() error {
-	_ = s.reader.Close()
-	s.shared.mu.Lock()
-	s.shared.remaining--
-	last := s.shared.remaining == 0
-	s.shared.mu.Unlock()
-	if last {
-		return s.shared.cmd.Wait()
-	}
-	return nil
+	s.closeOnce.Do(func() {
+		_ = s.reader.Close()
+		s.closeErr = s.shared.closeOne()
+	})
+	return s.closeErr
 }
 
 type streamReader struct {
