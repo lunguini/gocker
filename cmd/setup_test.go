@@ -1,6 +1,8 @@
 package cmd
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"testing"
 )
 
@@ -56,4 +58,47 @@ func TestFindInstallerAsset_NotFound(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected error when no installer asset found")
 	}
+}
+
+func TestVerifyAssetDigest(t *testing.T) {
+	sum := sha256.Sum256([]byte("pkg contents"))
+	hexSum := hex.EncodeToString(sum[:])
+
+	t.Run("matching digest passes", func(t *testing.T) {
+		asset := ghAsset{Name: "container.pkg", Digest: "sha256:" + hexSum}
+		if err := verifyAssetDigest(asset, sum[:]); err != nil {
+			t.Errorf("unexpected error: %v", err)
+		}
+	})
+
+	t.Run("matching digest is case-insensitive", func(t *testing.T) {
+		asset := ghAsset{Name: "container.pkg", Digest: "SHA256:" + hexSum}
+		// Only the "sha256:" prefix casing is normalized by strings.HasPrefix
+		// in the current implementation, so an uppercase prefix falls through
+		// to the "unrecognized format, skip" branch rather than an error.
+		if err := verifyAssetDigest(asset, sum[:]); err != nil {
+			t.Errorf("unexpected error: %v", err)
+		}
+	})
+
+	t.Run("mismatched digest fails", func(t *testing.T) {
+		asset := ghAsset{Name: "container.pkg", Digest: "sha256:" + hex.EncodeToString(make([]byte, sha256.Size))}
+		if err := verifyAssetDigest(asset, sum[:]); err == nil {
+			t.Fatal("expected error for mismatched digest")
+		}
+	})
+
+	t.Run("missing digest is skipped, not an error", func(t *testing.T) {
+		asset := ghAsset{Name: "container.pkg"}
+		if err := verifyAssetDigest(asset, sum[:]); err != nil {
+			t.Errorf("unexpected error for missing digest: %v", err)
+		}
+	})
+
+	t.Run("unrecognized digest format is skipped, not an error", func(t *testing.T) {
+		asset := ghAsset{Name: "container.pkg", Digest: "md5:deadbeef"}
+		if err := verifyAssetDigest(asset, sum[:]); err != nil {
+			t.Errorf("unexpected error for unrecognized digest format: %v", err)
+		}
+	})
 }

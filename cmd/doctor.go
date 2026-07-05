@@ -97,7 +97,8 @@ func gatherDiagnostics() []diagCheck {
 		}
 	}
 
-	// Daemon socket/pid health.
+	// Daemon socket/pid health. fsutil.HomeDir os.Exit(1)s if $HOME can't be
+	// resolved — acceptable here since doctor is only useful with a real home dir.
 	dir := filepath.Join(fsutil.HomeDir(), ".gocker")
 	sock := filepath.Join(dir, "gocker.sock")
 	if _, err := os.Stat(sock); err == nil {

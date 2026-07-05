@@ -19,6 +19,8 @@ import (
 )
 
 func gockerDir() string {
+	// fsutil.HomeDir os.Exit(1)s if $HOME can't be resolved — acceptable
+	// here since every daemon/CLI path needs ~/.gocker to do anything useful.
 	return filepath.Join(fsutil.HomeDir(), ".gocker")
 }
 

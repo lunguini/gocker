@@ -54,11 +54,7 @@ func (s *SharedVM) EffectiveWorkspaceDirs() []string {
 	if len(s.WorkspaceDirs) > 0 {
 		return s.WorkspaceDirs
 	}
-	home, _ := os.UserHomeDir()
-	if home != "" {
-		return []string{home}
-	}
-	return nil
+	return []string{fsutil.HomeDir()}
 }
 
 // Subsystem allows per-subsystem isolation override.

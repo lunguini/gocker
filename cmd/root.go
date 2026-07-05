@@ -40,21 +40,29 @@ func NewApp(version string) *cli.Command {
 	}
 
 	// Default: everything uses the direct runtime
-	generalRT := appleRT // for run, ps, exec, stop, rm, etc.
-	sandboxRT := appleRT // for sandbox commands (always full in hybrid)
+	generalRTDirect := appleRT // for run, ps, exec, stop, rm, etc.
+	sandboxRTDirect := appleRT // for sandbox commands (always full in hybrid)
 
 	// In hybrid/shared mode, create a SharedVM runtime for general commands
 	if isolation == "hybrid" || isolation == "shared" {
 		mgr := sharedvm.NewManager(appleRT, cfg.SharedVM)
 		sharedRT := sharedvm.NewSharedVMRuntime(mgr, appleRT)
 
-		generalRT = sharedRT
+		generalRTDirect = sharedRT
 
 		// Sandbox: only shared in explicit "shared" mode
 		if cfg.IsolationFor("sandbox", "") == "shared" {
-			sandboxRT = sharedRT
+			sandboxRTDirect = sharedRT
 		}
 	}
+
+	// generalRT/sandboxRT are runtimeSwitch instances, not the concrete
+	// runtimes above, so that the Before hook (which runs after flag
+	// parsing, unlike this constructor) can swap the underlying runtime
+	// when --isolation overrides the config-resolved mode (H5). Command
+	// constructors receive the switch and never see the swap happen.
+	generalRT := newRuntimeSwitch(generalRTDirect)
+	sandboxRT := newRuntimeSwitch(sandboxRTDirect)
 
 	return &cli.Command{
 		Name:                   "gocker",
@@ -74,30 +82,47 @@ func NewApp(version string) *cli.Command {
 			},
 			&cli.StringFlag{
 				Name:  "isolation",
-				Usage: "Isolation mode: full, hybrid, shared (compose only; other commands read ~/.gocker/config.yaml)",
+				Usage: "Isolation mode: full, hybrid, shared (overrides ~/.gocker/config.yaml for this invocation)",
 			},
 		},
 		Before: func(ctx context.Context, cmd *cli.Command) (context.Context, error) {
 			first := cmd.Args().First()
+
+			// --isolation re-resolves the runtimes behind generalRT/sandboxRT
+			// (both runtimeSwitch instances) now that flags are parsed. This
+			// runs even for "setup"/"ai"/"" so `gocker --isolation shared ai`
+			// reflects the override in its printed context, though those
+			// commands skip the validation/auto-start below.
+			if cmd.IsSet("isolation") {
+				override := cmd.String("isolation")
+				switch override {
+				case "full", "hybrid", "shared":
+				default:
+					return ctx, cli.Exit(fmt.Sprintf("invalid --isolation value %q (must be full, hybrid, or shared)", override), 1)
+				}
+
+				if override != isolation {
+					var newGeneral, newSandbox engine.Runtime = appleRT, appleRT
+					if override == "hybrid" || override == "shared" {
+						mgr := sharedvm.NewManager(appleRT, cfg.SharedVM)
+						sharedRT := sharedvm.NewSharedVMRuntime(mgr, appleRT)
+						newGeneral = sharedRT
+						if cfg.IsolationFor("sandbox", override) == "shared" {
+							newSandbox = sharedRT
+						}
+					}
+					generalRT.Store(newGeneral)
+					sandboxRT.Store(newSandbox)
+				}
+			}
+
 			if first == "setup" || first == "ai" || first == "" {
 				return ctx, nil
 			}
 
-			// --isolation only takes effect for `compose` today: runtimes for
-			// every other command are built once in NewApp, before flags are
-			// parsed, so re-resolving them here would require plumbing a
-			// mutable runtime indirection through every command constructor.
-			// Rather than silently ignore the flag (H5), refuse explicitly so
-			// users aren't misled into thinking it took effect; ~/.gocker/config.yaml
-			// is the supported way to change isolation mode for these commands.
-			if cmd.IsSet("isolation") && first != "compose" {
-				return ctx, cli.Exit(fmt.Sprintf("--isolation is not yet supported for %q commands (only `gocker compose`); set \"isolation\" in ~/.gocker/config.yaml instead", first), 1)
-			}
-
-			// Warn if sandbox isolation is downgraded. --isolation can't
-			// reach here for "sandbox" (rejected above), so only the
-			// config-file mode is relevant.
-			if first == "sandbox" && cfg.IsolationFor("sandbox", "") == "shared" {
+			// Warn if sandbox isolation is downgraded, whether via
+			// --isolation or ~/.gocker/config.yaml.
+			if first == "sandbox" && cfg.IsolationFor("sandbox", cmd.String("isolation")) == "shared" {
 				fmt.Fprintln(os.Stderr, "⚠ Running sandbox in shared isolation mode. Agent has kernel-level access to other containers. Use \"isolation: full\" in ~/.gocker/config.yaml for hardware isolation.")
 			}
 

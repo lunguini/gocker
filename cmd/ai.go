@@ -120,8 +120,8 @@ sharedVM:
 ## Global flags
 
 --format json                          JSON output on any command
---isolation MODE                       Override isolation mode (compose only; other
-                                        commands error and point at config.yaml)
+--isolation MODE                       Override isolation mode (full, hybrid, shared)
+                                        for this invocation
 --debug                                Debug output
 
 ## Common patterns
