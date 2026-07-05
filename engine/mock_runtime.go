@@ -14,7 +14,9 @@ type MockRuntime struct {
 	ExecFunc              func(ctx context.Context, args ...string) ([]byte, []byte, error)
 	ExecInteractiveFunc   func(ctx context.Context, args ...string) error
 	ExecStreamFunc        func(ctx context.Context, args ...string) (io.ReadCloser, error)
+	ExecStreamStdinFunc   func(ctx context.Context, stdin io.Reader, args ...string) (io.ReadCloser, io.ReadCloser, error)
 	ContainerRunFunc      func(ctx context.Context, args []string, interactive bool) error
+	ContainerCreateFunc   func(ctx context.Context, args []string) (string, error)
 	ContainerListFunc     func(ctx context.Context, all bool) ([]ContainerInfo, error)
 	ContainerStopFunc     func(ctx context.Context, nameOrID string) error
 	ContainerStartFunc    func(ctx context.Context, nameOrID string) error
@@ -81,11 +83,25 @@ func (m *MockRuntime) ExecStreamSplit(ctx context.Context, args ...string) (io.R
 	panic("MockRuntime: ExecStreamSplit not implemented")
 }
 
+func (m *MockRuntime) ExecStreamStdin(ctx context.Context, stdin io.Reader, args ...string) (io.ReadCloser, io.ReadCloser, error) {
+	if m.ExecStreamStdinFunc == nil {
+		panic("MockRuntime: ExecStreamStdin called but ExecStreamStdinFunc is nil")
+	}
+	return m.ExecStreamStdinFunc(ctx, stdin, args...)
+}
+
 func (m *MockRuntime) ContainerRun(ctx context.Context, args []string, interactive bool) error {
 	if m.ContainerRunFunc == nil {
 		panic("MockRuntime: ContainerRun called but ContainerRunFunc is nil")
 	}
 	return m.ContainerRunFunc(ctx, args, interactive)
+}
+
+func (m *MockRuntime) ContainerCreate(ctx context.Context, args []string) (string, error) {
+	if m.ContainerCreateFunc == nil {
+		panic("MockRuntime: ContainerCreate called but ContainerCreateFunc is nil")
+	}
+	return m.ContainerCreateFunc(ctx, args)
 }
 
 func (m *MockRuntime) ContainerList(ctx context.Context, all bool) ([]ContainerInfo, error) {

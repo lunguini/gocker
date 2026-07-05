@@ -22,6 +22,18 @@ func (e *Engine) ContainerRun(ctx context.Context, args []string, interactive bo
 	return nil
 }
 
+// ContainerCreate runs `container create <args>` and returns the new
+// container's ID (Apple's CLI prints it on stdout). Unlike ContainerRun this
+// does not start the container — the API create/start split relies on it.
+func (e *Engine) ContainerCreate(ctx context.Context, args []string) (string, error) {
+	cmdArgs := append([]string{"create"}, args...)
+	stdout, stderr, err := e.Exec(ctx, cmdArgs...)
+	if err != nil {
+		return "", cliError(stderr, err)
+	}
+	return strings.TrimSpace(string(stdout)), nil
+}
+
 func (e *Engine) ContainerList(ctx context.Context, all bool) ([]ContainerInfo, error) {
 	args := []string{"list", "--format", "json"}
 	if all {

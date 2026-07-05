@@ -8,6 +8,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"golang.org/x/term"
 )
 
 // Logger provides rolling terminal display and file-based request logging.
@@ -16,12 +18,13 @@ type Logger struct {
 	lines   []string
 	maxShow int
 	file    *os.File
+	isTTY   bool
 }
 
 // NewLogger creates a logger that shows the last maxShow lines on the terminal
 // and writes all entries to logFile. Pass "" for logFile to skip file logging.
 func NewLogger(maxShow int, logFile string) (*Logger, error) {
-	l := &Logger{maxShow: maxShow}
+	l := &Logger{maxShow: maxShow, isTTY: term.IsTerminal(int(os.Stderr.Fd()))}
 	if logFile != "" {
 		f, err := os.OpenFile(logFile, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)
 		if err != nil {
@@ -55,6 +58,15 @@ func (l *Logger) Log(line string) {
 }
 
 func (l *Logger) render() {
+	// When stderr isn't a terminal (daemon under launchd, or output
+	// redirected to a file), ANSI cursor-movement codes would just fill the
+	// log with escape sequences. Append the newest line plainly instead.
+	if !l.isTTY {
+		if n := len(l.lines); n > 0 {
+			fmt.Fprintln(os.Stderr, l.lines[n-1])
+		}
+		return
+	}
 	// Move cursor up to clear previous display, then rewrite.
 	// On first call there's nothing to clear, but ANSI codes handle that gracefully.
 	n := len(l.lines)

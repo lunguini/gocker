@@ -164,10 +164,36 @@ func (e *Engine) ExecStreamSplit(ctx context.Context, args ...string) (io.ReadCl
 	return execStreamSplit(ctx, e.Binary, args...)
 }
 
+func (e *Engine) ExecStreamStdin(ctx context.Context, stdin io.Reader, args ...string) (io.ReadCloser, io.ReadCloser, error) {
+	return execStreamSplitStdin(ctx, e.Binary, stdin, args...)
+}
+
 // execStreamSplit starts a command and returns separate stdout/stderr pipes.
 // The cmd.Wait runs in the background once both pipes hit EOF.
 func execStreamSplit(ctx context.Context, binary string, args ...string) (io.ReadCloser, io.ReadCloser, error) {
+	return execStreamSplitStdin(ctx, binary, nil, args...)
+}
+
+// execStreamSplitStdin is execStreamSplit with an optional caller-supplied
+// stdin reader. When stdin is non-nil it is wired to the child through an
+// os.Pipe that WE own and copy into — deliberately NOT via os/exec's own
+// cmd.Stdin=<io.Reader> path, whose copy goroutine cmd.Wait() blocks on. That
+// would hang the daemon: a command like `echo hi` exits without draining
+// stdin, but Wait() (reached via splitReader.Close) would wait forever for the
+// stdin copy from a still-open client connection. Owning the pipe lets Wait
+// reap the process immediately; the copy goroutine ends when the caller's
+// reader hits EOF (client half-close) or the connection is closed.
+func execStreamSplitStdin(ctx context.Context, binary string, stdin io.Reader, args ...string) (io.ReadCloser, io.ReadCloser, error) {
 	cmd := exec.CommandContext(ctx, binary, args...)
+	var stdinPW *os.File
+	if stdin != nil {
+		pr, pw, err := os.Pipe()
+		if err != nil {
+			return nil, nil, fmt.Errorf("stdin pipe: %w", err)
+		}
+		cmd.Stdin = pr // *os.File: os/exec passes the fd directly, no copy goroutine
+		stdinPW = pw
+	}
 	stdout, err := cmd.StdoutPipe()
 	if err != nil {
 		return nil, nil, fmt.Errorf("stdout pipe: %w", err)
@@ -178,6 +204,19 @@ func execStreamSplit(ctx context.Context, binary string, args ...string) (io.Rea
 	}
 	if err := cmd.Start(); err != nil {
 		return nil, nil, fmt.Errorf("start: %w", err)
+	}
+	if stdinPW != nil {
+		// The child inherited the read end at fork; close our copy so it sees
+		// EOF once stdinPW closes. Closing stdinPW on the caller's EOF (client
+		// half-closing its write side) is what lets `docker exec -i cat`
+		// terminate.
+		if pr, ok := cmd.Stdin.(*os.File); ok {
+			_ = pr.Close()
+		}
+		go func() {
+			_, _ = io.Copy(stdinPW, stdin)
+			_ = stdinPW.Close()
+		}()
 	}
 	shared := &sharedCmd{cmd: cmd, remaining: 2}
 	return &splitReader{shared: shared, reader: stdout}, &splitReader{shared: shared, reader: stderr}, nil

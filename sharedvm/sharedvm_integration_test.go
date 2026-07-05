@@ -4,6 +4,7 @@ package sharedvm
 
 import (
 	"context"
+	"os"
 	"strings"
 	"testing"
 	"time"
@@ -11,6 +12,17 @@ import (
 	"github.com/lunguini/gocker/config"
 	"github.com/lunguini/gocker/engine"
 )
+
+// requireDestructiveTests skips tests that remove/recreate the shared VM
+// unless GOCKER_DESTRUCTIVE_TESTS=1 is set. Every test here calls m.Remove,
+// which would destroy a developer's in-use shared VM (and everything inside
+// it) if run unguarded during `make test-all`.
+func requireDestructiveTests(t *testing.T) {
+	t.Helper()
+	if os.Getenv("GOCKER_DESTRUCTIVE_TESTS") != "1" {
+		t.Skip("skipping destructive test; set GOCKER_DESTRUCTIVE_TESTS=1 to run (removes/recreates the shared VM)")
+	}
+}
 
 func integrationManager(t *testing.T) *Manager {
 	t.Helper()
@@ -43,6 +55,7 @@ func skipIfNoVirtualization(t *testing.T, err error) {
 }
 
 func TestIntegration_SharedVM_CreateAndStatus(t *testing.T) {
+	requireDestructiveTests(t)
 	m := integrationManager(t)
 	ctx := context.Background()
 
@@ -65,6 +78,7 @@ func TestIntegration_SharedVM_CreateAndStatus(t *testing.T) {
 }
 
 func TestIntegration_SharedVM_StopAndRestart(t *testing.T) {
+	requireDestructiveTests(t)
 	m := integrationManager(t)
 	ctx := context.Background()
 
@@ -104,6 +118,7 @@ func TestIntegration_SharedVM_StopAndRestart(t *testing.T) {
 }
 
 func TestIntegration_SharedVM_RemoveAndRecreate(t *testing.T) {
+	requireDestructiveTests(t)
 	m := integrationManager(t)
 	ctx := context.Background()
 
@@ -138,6 +153,7 @@ func TestIntegration_SharedVM_RemoveAndRecreate(t *testing.T) {
 }
 
 func TestIntegration_GetContainerStatus_RealInspect(t *testing.T) {
+	requireDestructiveTests(t)
 	m := integrationManager(t)
 	ctx := context.Background()
 

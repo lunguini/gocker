@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"sort"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -102,8 +103,12 @@ func (s *Server) handleContainerCreate(w http.ResponseWriter, r *http.Request) {
 	req.Env = applyInitDirWorkarounds(req.Image, req.HostConfig, req.Env)
 
 	name := r.URL.Query().Get("name")
+	// Build the create arg vector. This is the same translation the old
+	// run-at-create handler did, minus `-d` — the container is created
+	// stopped and only started by a later POST /containers/{id}/start (the
+	// Docker create→start choreography). Publishing ports (previously dropped
+	// silently, finding C4) happens here via portPublishArgs.
 	var args []string
-	args = append(args, "-d")
 	if name != "" {
 		args = append(args, "--name", name)
 	}
@@ -139,6 +144,7 @@ func (s *Server) handleContainerCreate(w http.ResponseWriter, r *http.Request) {
 			args = append(args, "--network", req.HostConfig.NetworkMode)
 		}
 	}
+	args = append(args, portPublishArgs(req.HostConfig, req.ExposedPorts)...)
 	// Compose v2 (and Docker SDK) sends Entrypoint as a separate field; we
 	// were silently dropping it, so containers ran the image's default
 	// CMD instead of the user-supplied entrypoint and exited immediately
@@ -164,34 +170,31 @@ func (s *Server) handleContainerCreate(w http.ResponseWriter, r *http.Request) {
 		args = append(args, req.Cmd...)
 	}
 
-	if err := s.eng.ContainerRun(r.Context(), args, false); err != nil {
-		writeError(w, http.StatusInternalServerError, err.Error())
+	// Create the container WITHOUT starting it. The backend prints the new
+	// container's real ID on stdout, which we return directly — no more
+	// guessing from the ?name= param or resolving by list.
+	id, err := s.eng.ContainerCreate(r.Context(), args)
+	if err != nil {
+		// A missing image maps to 404 ("No such image"); real backend failures
+		// to 500 — matching Docker's create semantics.
+		writeRuntimeError(w, err, "image", req.Image)
 		return
 	}
-
-	// Resolve the container's real ID so the response and events don't carry a
-	// fabricated identifier. Previously the handler returned the ?name= param
-	// (or the literal "unknown"), which breaks clients that address the
-	// container by the returned ID and makes event consumers see phantom
-	// lifecycles for an ID that doesn't exist.
-	id := s.resolveContainerID(r.Context(), name)
-
-	warnings := []string{}
-	if req.HostConfig != nil && (len(req.HostConfig.PortBindings) > 0) {
-		// Port publishing via the API body isn't wired through yet (tracked as
-		// C4). Be honest about the drop rather than silently discarding it.
-		warnings = append(warnings, "port bindings are not yet applied by gocker; ports were not published")
+	// Some backends/shapes may not echo the ID (or echo a truncated form);
+	// fall back to resolving by name so the response is still addressable.
+	if id == "" {
+		id = s.resolveContainerID(r.Context(), name)
 	}
 
-	// This handler still runs the container at create time (the create/start
-	// split is a separate change), so both create and start genuinely
-	// happened — but only publish when we have a real ID to attribute them to.
+	warnings := unsupportedFieldWarnings(&req)
+
+	// Create only publishes a `create` event now — the container isn't
+	// started here, so the `start` event belongs to POST /containers/{id}/start.
 	if id != "" {
 		s.publishEvent("container", "create", id, map[string]string{"image": req.Image, "name": name})
-		s.publishEvent("container", "start", id, map[string]string{"image": req.Image, "name": name})
 	}
 	// The response Id must be non-empty for clients; fall back to the name when
-	// we couldn't resolve a real ID (e.g. anonymous container list race).
+	// the backend didn't echo an ID and the list lookup missed.
 	respID := id
 	if respID == "" {
 		respID = name
@@ -200,6 +203,97 @@ func (s *Server) handleContainerCreate(w http.ResponseWriter, r *http.Request) {
 		ID:       respID,
 		Warnings: warnings,
 	})
+}
+
+// portPublishArgs translates Docker's HostConfig.PortBindings and
+// ExposedPorts into `-p`/`--expose` CLI flags. PortBindings (published ports)
+// become `-p [hostIP:]hostPort:containerPort/proto`; an empty HostPort lets the
+// backend pick an ephemeral host port. ExposedPorts that aren't also published
+// become `--expose containerPort/proto` (documented, not published) — matching
+// Docker. Previously both were dropped, so `ports:` in a compose file and `-p`
+// over the API did nothing (finding C4). Ordering is deterministic (sorted
+// keys) so create commands are reproducible.
+func portPublishArgs(hc *HostConfig, exposed map[string]struct{}) []string {
+	var args []string
+	bound := map[string]bool{}
+	if hc != nil {
+		for _, portProto := range sortedPortKeys(hc.PortBindings) {
+			bound[portProto] = true
+			cp := normalizePortProto(portProto)
+			for _, b := range hc.PortBindings[portProto] {
+				spec := ""
+				if b.HostIP != "" {
+					spec = b.HostIP + ":"
+				}
+				if b.HostPort != "" {
+					spec += b.HostPort + ":"
+				}
+				spec += cp
+				args = append(args, "-p", spec)
+			}
+		}
+	}
+	for _, portProto := range sortedExposedKeys(exposed) {
+		if bound[portProto] {
+			continue
+		}
+		args = append(args, "--expose", normalizePortProto(portProto))
+	}
+	return args
+}
+
+// normalizePortProto returns "port/proto", defaulting the proto to tcp when
+// Docker sent a bare "80" key. Keeping the /proto suffix explicit is accepted
+// by both nerdctl and Apple's container CLI.
+func normalizePortProto(portProto string) string {
+	if strings.Contains(portProto, "/") {
+		return portProto
+	}
+	return portProto + "/tcp"
+}
+
+func sortedPortKeys(m map[string][]PortBind) []string {
+	keys := make([]string, 0, len(m))
+	for k := range m {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	return keys
+}
+
+func sortedExposedKeys(m map[string]struct{}) []string {
+	keys := make([]string, 0, len(m))
+	for k := range m {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	return keys
+}
+
+// unsupportedFieldWarnings reports, via the create response's Warnings array,
+// the client-supplied fields gocker knowingly drops rather than silently
+// ignoring them (Docker uses Warnings for exactly this). These are decoded but
+// not forwarded to the backend — see the HostConfig struct comment.
+func unsupportedFieldWarnings(req *CreateContainerRequest) []string {
+	warnings := []string{}
+	if req.User != "" {
+		warnings = append(warnings, "User is not applied: Apple's container exec/run has no --user; set the user in the image instead")
+	}
+	if hc := req.HostConfig; hc != nil {
+		if hc.Memory > 0 {
+			warnings = append(warnings, "HostConfig.Memory is not applied by gocker")
+		}
+		if len(hc.CapAdd) > 0 {
+			warnings = append(warnings, "HostConfig.CapAdd is not applied by gocker")
+		}
+		if len(hc.ExtraHosts) > 0 {
+			warnings = append(warnings, "HostConfig.ExtraHosts is not applied by gocker")
+		}
+		if hc.RestartPolicy != nil && hc.RestartPolicy.Name != "" && hc.RestartPolicy.Name != "no" {
+			warnings = append(warnings, "HostConfig.RestartPolicy is not applied by gocker")
+		}
+	}
+	return warnings
 }
 
 // resolveContainerID looks up the real container ID for a just-created
@@ -449,15 +543,9 @@ func (s *Server) handleExecStart(w http.ResponseWriter, r *http.Request) {
 	}
 	_ = buf.Flush()
 
-	// NOTE (stdin/TTY limitation): the Runtime interface exposes no exec
-	// variant that accepts a caller-supplied stdin reader or allocates a PTY,
-	// and every backend method proxies correctly through the shared VM only
-	// via these methods (building our own exec.Command from BinaryPath would
-	// break shared/hybrid mode). So `docker exec -i` input read off `conn`
-	// cannot be piped to the process today, and true `-t` TTY allocation
-	// isn't available. We forward Env/WorkingDir/User (which backends do
-	// support) and frame stdout/stderr separately below. Full stdin/PTY
-	// support needs a new Runtime method (see ws1-notes cross-stream need).
+	// True `-t` PTY allocation is still unavailable (the outer shared-VM exec
+	// can't allocate a pty without a real host terminal — CLAUDE.md's TTY
+	// rules), so the TTY path raw-copies merged output and doesn't pipe stdin.
 	if tty {
 		// Client asked for a merged raw stream (TTY semantics). ExecStream
 		// merges the child's stderr into the server's stderr, so we pass its
@@ -472,11 +560,20 @@ func (s *Server) handleExecStart(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Non-TTY: split stdout/stderr so each is framed with its correct Docker
-	// multiplex stream type (1=stdout, 2=stderr). Previously stderr was merged
-	// into the server's own stderr and lost, and every frame was mislabeled
-	// stdout — clients that demultiplex got wrong data.
-	stdout, stderr, serr := s.eng.ExecStreamSplit(r.Context(), execArgs...)
+	// Non-TTY: wire the hijacked connection's read side to the process stdin
+	// (real `docker exec -i` input piping) via ExecStreamStdin, and frame
+	// stdout/stderr separately with their correct Docker multiplex stream
+	// types (1=stdout, 2=stderr). `buf` reads any bytes already buffered by
+	// the hijack plus the live connection; when the client half-closes its
+	// write side, buf hits EOF, the backend closes the child's stdin, and
+	// stdin-reading commands like `cat` terminate. Only attach stdin when the
+	// client actually requested it (AttachStdin) — otherwise leave it nil so a
+	// non-`-i` exec isn't blocked reading a connection that never sends input.
+	var stdinR io.Reader
+	if entry.config.AttachStdin {
+		stdinR = buf
+	}
+	stdout, stderr, serr := s.eng.ExecStreamStdin(r.Context(), stdinR, execArgs...)
 	if serr != nil {
 		finishExec(id, 1)
 		return

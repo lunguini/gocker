@@ -434,9 +434,9 @@ func TestDockerCompat_ContainerCreate_IgnoresDefaultNetworkMode(t *testing.T) {
 	// gocker must NOT forward that to the backend (which doesn't know "default").
 	var capturedArgs []string
 	stub := &stubRuntime{
-		containerRun: func(ctx context.Context, args []string, interactive bool) error {
+		containerCreate: func(ctx context.Context, args []string) (string, error) {
 			capturedArgs = args
-			return nil
+			return "ctr-abc", nil
 		},
 	}
 	srv := NewServer(stub, "")
@@ -456,9 +456,9 @@ func TestDockerCompat_ContainerCreate_IgnoresDefaultNetworkMode(t *testing.T) {
 func TestDockerCompat_ContainerCreate_PassesExplicitNetworkMode(t *testing.T) {
 	var capturedArgs []string
 	stub := &stubRuntime{
-		containerRun: func(ctx context.Context, args []string, interactive bool) error {
+		containerCreate: func(ctx context.Context, args []string) (string, error) {
 			capturedArgs = args
-			return nil
+			return "ctr-abc", nil
 		},
 	}
 	srv := NewServer(stub, "")
@@ -476,6 +476,88 @@ func TestDockerCompat_ContainerCreate_PassesExplicitNetworkMode(t *testing.T) {
 	}
 	if !found {
 		t.Errorf("explicit network mode 'my-net' not forwarded: %v", capturedArgs)
+	}
+}
+
+func TestDockerCompat_ContainerCreate_ReturnsRealIDAndNoStart(t *testing.T) {
+	// create must NOT start the container (no -d), must return the real ID the
+	// backend printed, and must publish only a `create` event.
+	var capturedArgs []string
+	stub := &stubRuntime{
+		containerCreate: func(ctx context.Context, args []string) (string, error) {
+			capturedArgs = args
+			return "deadbeefcafe", nil
+		},
+	}
+	srv := NewServer(stub, "")
+
+	rr := doPOST(t, srv, "/containers/create?name=web", `{"Image":"nginx:1.25"}`)
+	if rr.Code != http.StatusCreated {
+		t.Fatalf("status: got %d, want 201; body=%s", rr.Code, rr.Body.String())
+	}
+	var out dockercontainer.CreateResponse
+	if err := json.Unmarshal(rr.Body.Bytes(), &out); err != nil {
+		t.Fatalf("unmarshal: %v; body=%s", err, rr.Body.String())
+	}
+	if out.ID != "deadbeefcafe" {
+		t.Errorf("ID: got %q, want the backend-printed deadbeefcafe", out.ID)
+	}
+	for _, a := range capturedArgs {
+		if a == "-d" {
+			t.Errorf("create must not pass -d (would start the container): %v", capturedArgs)
+		}
+	}
+}
+
+func TestDockerCompat_ContainerCreate_PublishesPorts(t *testing.T) {
+	// PortBindings and ExposedPorts were previously dropped silently (C4).
+	var capturedArgs []string
+	stub := &stubRuntime{
+		containerCreate: func(ctx context.Context, args []string) (string, error) {
+			capturedArgs = args
+			return "ctr-1", nil
+		},
+	}
+	srv := NewServer(stub, "")
+
+	body := `{"Image":"nginx","ExposedPorts":{"9000/tcp":{}},` +
+		`"HostConfig":{"PortBindings":{"80/tcp":[{"HostIp":"0.0.0.0","HostPort":"8080"}]}}}`
+	rr := doPOST(t, srv, "/containers/create?name=web", body)
+	if rr.Code != http.StatusCreated {
+		t.Fatalf("status: got %d, want 201; body=%s", rr.Code, rr.Body.String())
+	}
+	joined := strings.Join(capturedArgs, " ")
+	if !strings.Contains(joined, "-p 0.0.0.0:8080:80/tcp") {
+		t.Errorf("published port not translated to -p: %v", capturedArgs)
+	}
+	// 9000 is exposed but not bound → --expose, not published.
+	if !strings.Contains(joined, "--expose 9000/tcp") {
+		t.Errorf("exposed-only port not translated to --expose: %v", capturedArgs)
+	}
+}
+
+func TestDockerCompat_ContainerCreate_WarnsOnDroppedFields(t *testing.T) {
+	stub := &stubRuntime{
+		containerCreate: func(ctx context.Context, args []string) (string, error) {
+			return "ctr-1", nil
+		},
+	}
+	srv := NewServer(stub, "")
+
+	body := `{"Image":"nginx","User":"1000",` +
+		`"HostConfig":{"Memory":536870912,"CapAdd":["NET_ADMIN"],` +
+		`"ExtraHosts":["host.docker.internal:host-gateway"],` +
+		`"RestartPolicy":{"Name":"always"}}}`
+	rr := doPOST(t, srv, "/containers/create?name=web", body)
+	if rr.Code != http.StatusCreated {
+		t.Fatalf("status: got %d, want 201; body=%s", rr.Code, rr.Body.String())
+	}
+	var out dockercontainer.CreateResponse
+	if err := json.Unmarshal(rr.Body.Bytes(), &out); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	if len(out.Warnings) < 5 {
+		t.Errorf("expected warnings for User, Memory, CapAdd, ExtraHosts, RestartPolicy; got %v", out.Warnings)
 	}
 }
 

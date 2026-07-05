@@ -20,9 +20,21 @@ type Runtime interface {
 	ExecInteractive(ctx context.Context, args ...string) error
 	ExecStream(ctx context.Context, args ...string) (io.ReadCloser, error)
 	ExecStreamSplit(ctx context.Context, args ...string) (stdout io.ReadCloser, stderr io.ReadCloser, err error)
+	// ExecStreamStdin is ExecStreamSplit with a caller-supplied stdin reader
+	// wired to the child, enabling real `docker exec -i` input piping. Passing
+	// a nil stdin behaves exactly like ExecStreamSplit. Implementations MUST
+	// use `-i` only (never `-t`) for the outer shared-VM exec — Apple's
+	// `container exec -t` fails ("Operation not supported by device") when
+	// stdin isn't a real terminal, which is every API-daemon call.
+	ExecStreamStdin(ctx context.Context, stdin io.Reader, args ...string) (stdout io.ReadCloser, stderr io.ReadCloser, err error)
 
 	// Container lifecycle
 	ContainerRun(ctx context.Context, args []string, interactive bool) error
+	// ContainerCreate creates a container without starting it (docker create /
+	// nerdctl create / container create) and returns the new container's ID as
+	// printed by the backend. Used by the API's /containers/create → /start
+	// split; the CLI's `gocker run` continues to use ContainerRun.
+	ContainerCreate(ctx context.Context, args []string) (id string, err error)
 	ContainerList(ctx context.Context, all bool) ([]ContainerInfo, error)
 	ContainerStop(ctx context.Context, nameOrID string) error
 	ContainerStart(ctx context.Context, nameOrID string) error

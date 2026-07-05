@@ -54,6 +54,18 @@ type HostConfig struct {
 	Binds        []string              `json:"Binds,omitempty"`
 	PortBindings map[string][]PortBind `json:"PortBindings,omitempty"`
 	NetworkMode  string                `json:"NetworkMode"`
+	// The fields below are decoded so the create handler can honestly warn
+	// that it drops them (via the response Warnings array) instead of
+	// silently ignoring client intent. They are NOT forwarded to the backend.
+	Memory        int64          `json:"Memory,omitempty"`
+	CapAdd        []string       `json:"CapAdd,omitempty"`
+	ExtraHosts    []string       `json:"ExtraHosts,omitempty"`
+	RestartPolicy *RestartPolicy `json:"RestartPolicy,omitempty"`
+}
+
+type RestartPolicy struct {
+	Name              string `json:"Name"`
+	MaximumRetryCount int    `json:"MaximumRetryCount"`
 }
 
 type PortBind struct {
@@ -62,15 +74,17 @@ type PortBind struct {
 }
 
 type CreateContainerRequest struct {
-	Image      string            `json:"Image"`
-	Cmd        []string          `json:"Cmd,omitempty"`
-	Entrypoint []string          `json:"Entrypoint,omitempty"`
-	Env        []string          `json:"Env,omitempty"`
-	Tty        bool              `json:"Tty"`
-	OpenStdin  bool              `json:"OpenStdin"`
-	WorkingDir string            `json:"WorkingDir,omitempty"`
-	Labels     map[string]string `json:"Labels,omitempty"`
-	HostConfig *HostConfig       `json:"HostConfig,omitempty"`
+	Image        string              `json:"Image"`
+	Cmd          []string            `json:"Cmd,omitempty"`
+	Entrypoint   []string            `json:"Entrypoint,omitempty"`
+	Env          []string            `json:"Env,omitempty"`
+	Tty          bool                `json:"Tty"`
+	OpenStdin    bool                `json:"OpenStdin"`
+	WorkingDir   string              `json:"WorkingDir,omitempty"`
+	User         string              `json:"User,omitempty"`
+	Labels       map[string]string   `json:"Labels,omitempty"`
+	ExposedPorts map[string]struct{} `json:"ExposedPorts,omitempty"`
+	HostConfig   *HostConfig         `json:"HostConfig,omitempty"`
 }
 
 type CreateContainerResponse struct {

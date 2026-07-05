@@ -19,9 +19,11 @@ type stubRuntime struct {
 	containerInspect func(ctx context.Context, nameOrID string) ([]byte, error)
 	containerList    func(ctx context.Context, all bool) ([]engine.ContainerInfo, error)
 	containerRun     func(ctx context.Context, args []string, interactive bool) error
+	containerCreate  func(ctx context.Context, args []string) (string, error)
 	exec             func(ctx context.Context, args ...string) ([]byte, []byte, error)
 	execStream       func(ctx context.Context, args ...string) (io.ReadCloser, error)
 	execStreamSplit  func(ctx context.Context, args ...string) (io.ReadCloser, io.ReadCloser, error)
+	execStreamStdin  func(ctx context.Context, stdin io.Reader, args ...string) (io.ReadCloser, io.ReadCloser, error)
 	imageList        func(ctx context.Context) ([]engine.ImageInfo, error)
 	imagePull        func(ctx context.Context, image string, opts engine.ImagePullOpts) error
 	networkList      func(ctx context.Context) ([]engine.NetworkInfo, error)
@@ -56,11 +58,26 @@ func (s *stubRuntime) ExecStreamSplit(ctx context.Context, args ...string) (io.R
 	}
 	return nil, nil, nil
 }
+func (s *stubRuntime) ExecStreamStdin(ctx context.Context, stdin io.Reader, args ...string) (io.ReadCloser, io.ReadCloser, error) {
+	if s.execStreamStdin != nil {
+		return s.execStreamStdin(ctx, stdin, args...)
+	}
+	if s.execStreamSplit != nil {
+		return s.execStreamSplit(ctx, args...)
+	}
+	return nil, nil, nil
+}
 func (s *stubRuntime) ContainerRun(ctx context.Context, args []string, interactive bool) error {
 	if s.containerRun != nil {
 		return s.containerRun(ctx, args, interactive)
 	}
 	return nil
+}
+func (s *stubRuntime) ContainerCreate(ctx context.Context, args []string) (string, error) {
+	if s.containerCreate != nil {
+		return s.containerCreate(ctx, args)
+	}
+	return "", nil
 }
 func (s *stubRuntime) ContainerList(ctx context.Context, all bool) ([]engine.ContainerInfo, error) {
 	if s.containerList != nil {

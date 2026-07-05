@@ -75,6 +75,10 @@ func (n *NerdctlRuntime) ExecStreamSplit(ctx context.Context, args ...string) (i
 	return execStreamSplit(ctx, n.Binary, args...)
 }
 
+func (n *NerdctlRuntime) ExecStreamStdin(ctx context.Context, stdin io.Reader, args ...string) (io.ReadCloser, io.ReadCloser, error) {
+	return execStreamSplitStdin(ctx, n.Binary, stdin, args...)
+}
+
 // --- Container operations ---
 
 func (n *NerdctlRuntime) ContainerRun(ctx context.Context, args []string, interactive bool) error {
@@ -87,6 +91,18 @@ func (n *NerdctlRuntime) ContainerRun(ctx context.Context, args []string, intera
 		return wrapRunErr("nerdctl run", cmdArgs, nil, stderr, err)
 	}
 	return nil
+}
+
+// ContainerCreate runs `nerdctl create <args>` and returns the new
+// container's ID (nerdctl prints it on stdout). No start — the API
+// create/start split relies on this.
+func (n *NerdctlRuntime) ContainerCreate(ctx context.Context, args []string) (string, error) {
+	cmdArgs := append([]string{"create"}, args...)
+	stdout, stderr, err := n.Exec(ctx, cmdArgs...)
+	if err != nil {
+		return "", wrapRunErr("nerdctl create", cmdArgs, stdout, stderr, err)
+	}
+	return strings.TrimSpace(string(stdout)), nil
 }
 
 // wrapRunErr produces a useful error message when a shell-out fails. The

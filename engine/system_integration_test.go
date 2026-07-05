@@ -4,9 +4,21 @@ package engine
 
 import (
 	"context"
+	"os"
 	"strings"
 	"testing"
 )
+
+// requireDestructiveTests skips tests that mutate global host state (stopping
+// every container on the host, or removing/recreating the shared VM) unless
+// GOCKER_DESTRUCTIVE_TESTS=1 is set. Running `make test-all` on a machine with
+// live containers or an in-use shared VM should not silently blow them away.
+func requireDestructiveTests(t *testing.T) {
+	t.Helper()
+	if os.Getenv("GOCKER_DESTRUCTIVE_TESTS") != "1" {
+		t.Skip("skipping destructive test; set GOCKER_DESTRUCTIVE_TESTS=1 to run (stops all host containers / recreates the shared VM)")
+	}
+}
 
 func ensureSystemRunning(t *testing.T, eng *Engine) {
 	t.Helper()
@@ -29,6 +41,7 @@ func TestIntegration_SystemStatus_WhenRunning(t *testing.T) {
 }
 
 func TestIntegration_SystemStopAndRestart(t *testing.T) {
+	requireDestructiveTests(t)
 	eng := New("")
 	ensureSystemRunning(t, eng)
 

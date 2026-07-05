@@ -77,6 +77,21 @@ func (s *SharedVMRuntime) ExecStreamSplit(ctx context.Context, args ...string) (
 	return s.apple.ExecStreamSplit(ctx, vmArgs...)
 }
 
+// ExecStreamStdin proxies a gocker command into the shared VM with the
+// caller's stdin wired to the outer `container exec`. Only `-i` is used on the
+// outer exec (never `-t`): the daemon's stdin is never a real terminal, and
+// Apple's `container exec -t` fails without one. This is the shared-mode path
+// for real `docker exec -i` input piping.
+func (s *SharedVMRuntime) ExecStreamStdin(ctx context.Context, stdin io.Reader, args ...string) (io.ReadCloser, io.ReadCloser, error) {
+	if err := s.manager.EnsureRunning(ctx); err != nil {
+		return nil, nil, err
+	}
+	// -i only, never -t (see doc comment). Build the outer args explicitly
+	// rather than via proxyArgs so the TTY probe can't add -t here.
+	vmArgs := append([]string{"exec", "-i", s.manager.Name(), "gocker"}, args...)
+	return s.apple.ExecStreamStdin(ctx, stdin, vmArgs...)
+}
+
 // nerdctlBypass returns the args to pass directly to nerdctl when the
 // requested command would otherwise be routed through inner gocker.
 // Used to avoid waiting on a new gocker-base image before exposing flags
@@ -146,6 +161,37 @@ func (s *SharedVMRuntime) ContainerRun(ctx context.Context, args []string, inter
 		}
 	}
 	return nil
+}
+
+// ContainerCreate proxies `nerdctl create` into the shared VM, translating
+// host mount paths to VM-internal paths exactly like ContainerRun. Bypasses
+// the intermediate in-VM gocker (same reasons as ContainerRun) and returns the
+// created container's ID printed by nerdctl.
+func (s *SharedVMRuntime) ContainerCreate(ctx context.Context, args []string) (string, error) {
+	if err := s.manager.EnsureRunning(ctx); err != nil {
+		return "", err
+	}
+	translated, unmapped := s.translateMountArgs(args)
+	if len(unmapped) > 0 {
+		mountDirs, err := s.resolveUnmappedMounts(unmapped)
+		if err != nil {
+			return "", err
+		}
+		if err := s.manager.ExpandMounts(ctx, mountDirs); err != nil {
+			return "", err
+		}
+		translated, unmapped = s.translateMountArgs(args)
+		if len(unmapped) > 0 {
+			return "", fmt.Errorf("bind mount paths still not accessible after VM expansion: %v", unmapped)
+		}
+	}
+	createArgs := append([]string{"create"}, translated...)
+	outer := append([]string{"exec", s.manager.Name(), "nerdctl"}, createArgs...)
+	stdout, stderr, err := s.apple.Exec(ctx, outer...)
+	if err != nil {
+		return "", wrapExecErr(stderr, err)
+	}
+	return strings.TrimSpace(string(stdout)), nil
 }
 
 func (s *SharedVMRuntime) ContainerList(ctx context.Context, all bool) ([]engine.ContainerInfo, error) {
