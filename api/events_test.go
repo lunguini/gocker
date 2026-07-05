@@ -136,12 +136,12 @@ func TestHandleEventsHTTP(t *testing.T) {
 	bus.Publish(Event{
 		Type: "container", Action: "start",
 		Actor: EventActor{ID: "c1", Attributes: map[string]string{"name": "test"}},
-		Time: 1000, TimeNano: 1000000000, Scope: "local",
+		Time:  1000, TimeNano: 1000000000, Scope: "local",
 	})
 	bus.Publish(Event{
 		Type: "container", Action: "stop",
 		Actor: EventActor{ID: "c1"},
-		Time: 1001, TimeNano: 1001000000, Scope: "local",
+		Time:  1001, TimeNano: 1001000000, Scope: "local",
 	})
 
 	// Give time for events to be written

@@ -7,7 +7,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
-	"strings"
+	"regexp"
 	"syscall"
 
 	"github.com/lunguini/gocker/engine"
@@ -19,18 +19,33 @@ type Server struct {
 	mux        *http.ServeMux
 	events     *EventBus
 	logger     *Logger
+	version    string
 }
 
-func NewServer(eng engine.Runtime, socketPath string) *Server {
+// NewServer builds an API server. An optional version string (from ldflags)
+// is threaded into the /version and /info responses; when omitted it falls
+// back to "dev".
+func NewServer(eng engine.Runtime, socketPath string, version ...string) *Server {
+	ver := "dev"
+	if len(version) > 0 && version[0] != "" {
+		ver = version[0]
+	}
 	s := &Server{
 		eng:        eng,
 		socketPath: socketPath,
 		mux:        http.NewServeMux(),
 		events:     NewEventBus(),
+		version:    ver,
 	}
 	s.registerRoutes()
 	return s
 }
+
+// versionPrefix matches Docker's API version segment (e.g. "/v1.41/"). Only a
+// well-formed major.minor prefix is stripped; unversioned paths like
+// "/volumes/myvol" (which start with 'v' but aren't a version) are left alone.
+// Group 2 is the remainder of the path (starting with '/'), or empty.
+var versionPrefix = regexp.MustCompile(`^(/v\d+\.\d+)(/.*)?$`)
 
 func (s *Server) registerRoutes() {
 	// System
@@ -109,18 +124,20 @@ func (s *Server) ListenAndServe(ctx context.Context) error {
 	return nil
 }
 
-// ServeHTTP strips the API version prefix (e.g., /v1.41/) and delegates to the mux.
+// ServeHTTP strips the API version prefix (e.g., /v1.41/) and delegates to the
+// mux. Only a real /vMAJOR.MINOR/ prefix is stripped — unversioned routes such
+// as /volumes/myvol or /networks/... start with 'v' but must pass through
+// untouched (the old naive stripper turned /volumes/myvol into /myvol → 404).
 func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	path := r.URL.Path
-	// Strip /v1.XX/ prefix
-	if len(path) > 2 && path[0] == '/' && path[1] == 'v' {
-		if idx := strings.Index(path[2:], "/"); idx >= 0 {
-			stripped := path[2+idx:]
-			r.URL.Path = stripped
-			r.RequestURI = stripped
-			if r.URL.RawQuery != "" {
-				r.RequestURI = stripped + "?" + r.URL.RawQuery
-			}
+	if m := versionPrefix.FindStringSubmatch(r.URL.Path); m != nil {
+		stripped := m[2]
+		if stripped == "" {
+			stripped = "/"
+		}
+		r.URL.Path = stripped
+		r.RequestURI = stripped
+		if r.URL.RawQuery != "" {
+			r.RequestURI = stripped + "?" + r.URL.RawQuery
 		}
 	}
 	s.mux.ServeHTTP(w, r)

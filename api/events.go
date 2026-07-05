@@ -67,11 +67,15 @@ func (s *Server) handleEvents(w http.ResponseWriter, r *http.Request) {
 	ch, unsub := s.events.Subscribe()
 	defer unsub()
 
+	// Flush through ResponseController, not a w.(http.Flusher) assertion: the
+	// logging middleware wraps w in loggingResponseWriter, whose method set
+	// has no Flush, so the assertion fails and events sit buffered until the
+	// 4KB chunk fills — clients hang. ResponseController follows Unwrap().
+	rc := http.NewResponseController(w)
+
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
-	if f, ok := w.(http.Flusher); ok {
-		f.Flush()
-	}
+	_ = rc.Flush()
 
 	enc := json.NewEncoder(w)
 	for {
@@ -86,9 +90,7 @@ func (s *Server) handleEvents(w http.ResponseWriter, r *http.Request) {
 				continue
 			}
 			_ = enc.Encode(evt)
-			if f, ok := w.(http.Flusher); ok {
-				f.Flush()
-			}
+			_ = rc.Flush()
 		}
 	}
 }

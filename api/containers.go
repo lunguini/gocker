@@ -21,11 +21,6 @@ var (
 
 func (s *Server) handleContainerList(w http.ResponseWriter, r *http.Request) {
 	all := r.URL.Query().Get("all") == "1" || r.URL.Query().Get("all") == "true"
-	containers, err := s.eng.ContainerList(r.Context(), all)
-	if err != nil {
-		writeError(w, http.StatusInternalServerError, err.Error())
-		return
-	}
 
 	// Compose v2 drives 'docker compose exec SERVICE' off this filter — it
 	// asks /containers/json with label constraints identifying the
@@ -36,28 +31,57 @@ func (s *Server) handleContainerList(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "invalid filters: "+ferr.Error())
 		return
 	}
+	// A status filter implies Docker returns matching containers regardless of
+	// the `all` param (e.g. `docker ps -f status=exited` without `-a`). Fetch
+	// the full set so the filter can find stopped/created containers.
+	if len(filt.statuses) > 0 {
+		all = true
+	}
+
+	containers, err := s.eng.ContainerList(r.Context(), all)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
 
 	result := []ContainerJSON{}
 	for _, c := range containers {
 		if !filt.match(c) {
 			continue
 		}
-		result = append(result, ContainerJSON{
+		// Docker's Created is a Unix timestamp. When the backend didn't give
+		// us a real creation time, c.Created is the zero time and .Unix()
+		// yields -62135596800 — clients (lazydocker) then render "created
+		// 2000 years ago". Emit 0 instead, which clients treat as "unknown".
+		created := int64(0)
+		if !c.Created.IsZero() {
+			created = c.Created.Unix()
+		}
+		cj := ContainerJSON{
 			ID:      c.ID,
 			Names:   []string{"/" + c.Name},
 			Image:   c.Image,
 			Command: c.Command,
-			Created: c.Created.Unix(),
+			Created: created,
 			State:   deriveContainerState(c.State, c.Status),
 			Status:  c.Status,
 			Ports:   parseNerdctlPorts(c.Ports),
 			Labels:  c.Labels,
-			NetworkSettings: &NetworkSettings{
+		}
+		// Only report network settings when we actually have an address.
+		// Previously every container was fabricated onto a "bridge" network
+		// with an empty IP, which is dishonest and confuses clients that read
+		// NetworkSettings.Networks. We still don't know the real network name
+		// from the list output, so use "bridge" only as the endpoint key when
+		// an IP exists.
+		if c.IP != "" {
+			cj.NetworkSettings = &NetworkSettings{
 				Networks: map[string]*EndpointSettings{
 					"bridge": {IPAddress: c.IP},
 				},
-			},
-		})
+			}
+		}
+		result = append(result, cj)
 	}
 	writeJSON(w, http.StatusOK, result)
 }
@@ -145,17 +169,57 @@ func (s *Server) handleContainerCreate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Try to find the container we just created to get its ID
-	id := name
-	if id == "" {
-		id = "unknown"
+	// Resolve the container's real ID so the response and events don't carry a
+	// fabricated identifier. Previously the handler returned the ?name= param
+	// (or the literal "unknown"), which breaks clients that address the
+	// container by the returned ID and makes event consumers see phantom
+	// lifecycles for an ID that doesn't exist.
+	id := s.resolveContainerID(r.Context(), name)
+
+	warnings := []string{}
+	if req.HostConfig != nil && (len(req.HostConfig.PortBindings) > 0) {
+		// Port publishing via the API body isn't wired through yet (tracked as
+		// C4). Be honest about the drop rather than silently discarding it.
+		warnings = append(warnings, "port bindings are not yet applied by gocker; ports were not published")
 	}
-	s.publishEvent("container", "create", id, map[string]string{"image": req.Image, "name": name})
-	s.publishEvent("container", "start", id, map[string]string{"image": req.Image, "name": name})
+
+	// This handler still runs the container at create time (the create/start
+	// split is a separate change), so both create and start genuinely
+	// happened — but only publish when we have a real ID to attribute them to.
+	if id != "" {
+		s.publishEvent("container", "create", id, map[string]string{"image": req.Image, "name": name})
+		s.publishEvent("container", "start", id, map[string]string{"image": req.Image, "name": name})
+	}
+	// The response Id must be non-empty for clients; fall back to the name when
+	// we couldn't resolve a real ID (e.g. anonymous container list race).
+	respID := id
+	if respID == "" {
+		respID = name
+	}
 	writeJSON(w, http.StatusCreated, CreateContainerResponse{
-		ID:       id,
-		Warnings: []string{},
+		ID:       respID,
+		Warnings: warnings,
 	})
+}
+
+// resolveContainerID looks up the real container ID for a just-created
+// container by matching its name against the list output. Returns "" when the
+// name is empty or no match is found (transient list failures included).
+func (s *Server) resolveContainerID(ctx context.Context, name string) string {
+	if name == "" {
+		return ""
+	}
+	containers, err := s.eng.ContainerList(ctx, true)
+	if err != nil {
+		return ""
+	}
+	want := strings.TrimPrefix(name, "/")
+	for _, c := range containers {
+		if strings.TrimPrefix(c.Name, "/") == want {
+			return c.ID
+		}
+	}
+	return ""
 }
 
 func (s *Server) handleContainerStart(w http.ResponseWriter, r *http.Request) {
@@ -205,7 +269,9 @@ func (s *Server) handleContainerInspect(w http.ResponseWriter, r *http.Request) 
 	id := r.PathValue("id")
 	data, err := s.eng.ContainerInspect(r.Context(), id)
 	if err != nil {
-		writeError(w, http.StatusNotFound, err.Error())
+		// Map "no such container" to 404 but genuine backend failures to 500,
+		// like the sibling handlers — a blanket 404 masked real errors.
+		writeRuntimeError(w, err, "container", id)
 		return
 	}
 	// Reshape into the real Docker SDK ContainerJSON type with every
@@ -219,7 +285,6 @@ func (s *Server) handleContainerInspect(w http.ResponseWriter, r *http.Request) 
 	}
 	writeJSON(w, http.StatusOK, c)
 }
-
 
 func (s *Server) handleContainerLogs(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
@@ -268,16 +333,10 @@ func (s *Server) handleContainerLogs(w http.ResponseWriter, r *http.Request) {
 		wantStdout, wantStderr = true, true
 	}
 
-	if opts.Follow {
-		stdout, stderr, err := s.eng.ExecStreamSplit(r.Context(), args...)
-		if err != nil {
-			writeError(w, http.StatusInternalServerError, err.Error())
-			return
-		}
-		streamFramedLogs(w, stdout, stderr, wantStdout, wantStderr)
-		return
-	}
-
+	// Follow and non-follow take the same path: ExecStreamSplit runs the
+	// backing `logs` command (with or without --follow already baked into
+	// args) and streamFramedLogs pumps until EOF. The follow flag only
+	// changes whether that command blocks for more output.
 	stdout, stderr, err := s.eng.ExecStreamSplit(r.Context(), args...)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, err.Error())
@@ -325,6 +384,8 @@ func (s *Server) handleExecCreate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	pruneExecStore()
+
 	id := fmt.Sprintf("exec-%d", execCounter.Add(1))
 	execStore.Store(id, execEntry{containerID: containerID, config: cfg})
 
@@ -343,11 +404,6 @@ func (s *Server) handleExecStart(w http.ResponseWriter, r *http.Request) {
 	// mid-flight if the Docker CLI inspects before the stream finishes.
 	entry.running = true
 	execStore.Store(id, entry)
-	// When the handler returns, persist the final state (running=false,
-	// exit code) so /exec/{id}/json can answer correctly.
-	defer func() {
-		execStore.Store(id, entry)
-	}()
 
 	// Parse start-time request. Detach=true is a fire-and-forget; all other
 	// shapes require a hijacked bidirectional stream (Docker CLI upgrades
@@ -359,17 +415,18 @@ func (s *Server) handleExecStart(w http.ResponseWriter, r *http.Request) {
 	}
 	// Tty can be set at create OR start time; the start value wins if present.
 	tty := entry.config.Tty || req.Tty
+	execArgs := buildExecArgs(entry, tty)
 
 	if req.Detach {
-		// Non-interactive background run — collect output, discard, return 200.
-		_, _, err := s.eng.Exec(r.Context(), append([]string{"exec", entry.containerID}, entry.config.Cmd...)...)
-		entry.running = false
-		if err != nil {
-			entry.exitCode = 1
-			writeError(w, http.StatusInternalServerError, err.Error())
-			return
-		}
-		entry.exitCode = 0
+		// Detached run: fire-and-forget in the background. Use a background
+		// context (not r.Context()) so the exec survives the HTTP client
+		// disconnecting — a detached exec must outlive its request. Respond
+		// 200 immediately, as Docker does, and record the result when it
+		// finishes for a later /exec/{id}/json.
+		go func() {
+			_, _, err := s.eng.Exec(context.Background(), execArgs...)
+			finishExec(id, exitCodeFromError(err))
+		}()
 		w.WriteHeader(http.StatusOK)
 		return
 	}
@@ -392,33 +449,125 @@ func (s *Server) handleExecStart(w http.ResponseWriter, r *http.Request) {
 	}
 	_ = buf.Flush()
 
-	stream, err := s.eng.ExecStream(r.Context(), append([]string{"exec", entry.containerID}, entry.config.Cmd...)...)
-	if err != nil {
-		// Can't write an error cleanly at this point (101 already flushed).
-		// Just close the connection and mark as failed.
-		entry.running = false
-		entry.exitCode = 1
+	// NOTE (stdin/TTY limitation): the Runtime interface exposes no exec
+	// variant that accepts a caller-supplied stdin reader or allocates a PTY,
+	// and every backend method proxies correctly through the shared VM only
+	// via these methods (building our own exec.Command from BinaryPath would
+	// break shared/hybrid mode). So `docker exec -i` input read off `conn`
+	// cannot be piped to the process today, and true `-t` TTY allocation
+	// isn't available. We forward Env/WorkingDir/User (which backends do
+	// support) and frame stdout/stderr separately below. Full stdin/PTY
+	// support needs a new Runtime method (see ws1-notes cross-stream need).
+	if tty {
+		// Client asked for a merged raw stream (TTY semantics). ExecStream
+		// merges the child's stderr into the server's stderr, so we pass its
+		// stdout through unframed, matching what a TTY client expects.
+		stream, serr := s.eng.ExecStream(r.Context(), execArgs...)
+		if serr != nil {
+			finishExec(id, 1)
+			return
+		}
+		_, _ = io.Copy(conn, stream)
+		finishExec(id, exitCodeFromError(stream.Close()))
 		return
 	}
 
-	if tty {
-		// TTY mode: stdout/stderr merged, pass bytes through raw.
-		_, _ = io.Copy(conn, stream)
-	} else {
-		// Non-TTY multiplex: 8-byte frame header per chunk.
-		//   [0]     = stream type (1=stdout, 2=stderr). We only have stdout
-		//             since ExecStream merges stderr into the server's stderr.
-		//   [1-3]   = reserved zeros
-		//   [4-7]   = big-endian uint32 payload size
-		writeFramedChunks(conn, stream)
+	// Non-TTY: split stdout/stderr so each is framed with its correct Docker
+	// multiplex stream type (1=stdout, 2=stderr). Previously stderr was merged
+	// into the server's own stderr and lost, and every frame was mislabeled
+	// stdout — clients that demultiplex got wrong data.
+	stdout, stderr, serr := s.eng.ExecStreamSplit(r.Context(), execArgs...)
+	if serr != nil {
+		finishExec(id, 1)
+		return
 	}
+	closeErr := streamFramedExecSplit(conn, stdout, stderr)
+	finishExec(id, exitCodeFromError(closeErr))
+}
 
-	// Close() waits for the command to finish and returns its exit error.
-	// We capture the exit code so /exec/{id}/json can report it to clients
-	// that check `docker exec`'s exit status (most of them do).
-	closeErr := stream.Close()
+// buildExecArgs assembles the backend exec argument vector for an exec entry.
+// Env/WorkingDir/User are forwarded as -e/-w/-u where the backend supports
+// them (nerdctl fully; Apple's `container exec` has no --user, so a User-set
+// exec surfaces a clear backend error there rather than being silently
+// dropped). The `-i` keeps stdin open on the backend side; see the stdin
+// limitation note in handleExecStart.
+func buildExecArgs(entry execEntry, tty bool) []string {
+	args := []string{"exec", "-i"}
+	if entry.config.WorkingDir != "" {
+		args = append(args, "-w", entry.config.WorkingDir)
+	}
+	if entry.config.User != "" {
+		args = append(args, "-u", entry.config.User)
+	}
+	for _, e := range entry.config.Env {
+		args = append(args, "-e", e)
+	}
+	args = append(args, entry.containerID)
+	args = append(args, entry.config.Cmd...)
+	return args
+}
+
+// finishExec records an exec's terminal state (running=false, exit code,
+// finish time) so /exec/{id}/json can report it and pruneExecStore can later
+// evict it. Safe to call from the request goroutine or a detached one.
+func finishExec(id string, exitCode int) {
+	val, ok := execStore.Load(id)
+	if !ok {
+		return
+	}
+	entry := val.(execEntry)
 	entry.running = false
-	entry.exitCode = exitCodeFromError(closeErr)
+	entry.exitCode = exitCode
+	entry.finishedAt = time.Now()
+	execStore.Store(id, entry)
+}
+
+// streamFramedExecSplit pumps stdout/stderr concurrently into Docker's 8-byte
+// multiplex frames (type 1 for stdout, 2 for stderr) written to dst, then
+// closes both readers and returns the process exit error (the last reader
+// closed reaps the child). Unlike streamFramedLogs it returns that error so
+// the caller can surface the exit code.
+func streamFramedExecSplit(dst io.Writer, stdout, stderr io.ReadCloser) error {
+	var mu sync.Mutex
+	var wg sync.WaitGroup
+	pump := func(src io.Reader, streamType byte) {
+		defer wg.Done()
+		if src == nil {
+			return
+		}
+		buf := make([]byte, 4096)
+		for {
+			n, err := src.Read(buf)
+			if n > 0 {
+				mu.Lock()
+				writeFrameHeader(dst, streamType, n)
+				_, werr := dst.Write(buf[:n])
+				mu.Unlock()
+				if werr != nil {
+					return
+				}
+			}
+			if err != nil {
+				return
+			}
+		}
+	}
+	wg.Add(2)
+	go pump(stdout, 1)
+	go pump(stderr, 2)
+	wg.Wait()
+	// Close both; closeOne reaps on the last close and returns the exit error.
+	var err1, err2 error
+	if stdout != nil {
+		err1 = stdout.Close()
+	}
+	if stderr != nil {
+		err2 = stderr.Close()
+	}
+	if err1 != nil {
+		return err1
+	}
+	return err2
 }
 
 // exitCodeFromError extracts a shell-style exit code from exec.Cmd.Wait()'s
@@ -457,7 +606,11 @@ func (s *Server) handleContainerStats(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
-	flusher, _ := w.(http.Flusher)
+	// Flush via ResponseController so it works through the logging middleware's
+	// wrapper (which doesn't implement http.Flusher). A direct
+	// w.(http.Flusher) assertion fails there and the stats stream never
+	// reaches the client — lazydocker's stats panel hangs.
+	rc := http.NewResponseController(w)
 
 	writeSnapshot := func() bool {
 		snap := zeroStatsJSON(id)
@@ -466,9 +619,7 @@ func (s *Server) handleContainerStats(w http.ResponseWriter, r *http.Request) {
 		if _, err := w.Write(data); err != nil {
 			return false
 		}
-		if flusher != nil {
-			flusher.Flush()
-		}
+		_ = rc.Flush()
 		return true
 	}
 
@@ -603,48 +754,30 @@ func writeFrameHeader(w io.Writer, streamType byte, n int) {
 	_, _ = w.Write(header)
 }
 
-// writeFramedChunks reads from src in 4KB chunks and writes Docker's 8-byte
-// multiplex frame header followed by the payload. All output is tagged as
-// stdout (stream type 1) because our ExecStream doesn't split stderr today.
-// If dst implements http.Flusher, flushes after every frame — essential
-// for streaming endpoints like `docker logs --follow` where clients expect
-// output as it arrives.
-func writeFramedChunks(dst io.Writer, src io.Reader) {
-	flusher, _ := dst.(http.Flusher)
-	buf := make([]byte, 4096)
-	header := make([]byte, 8)
-	for {
-		n, err := src.Read(buf)
-		if n > 0 {
-			header[0] = 1 // stdout
-			header[1] = 0
-			header[2] = 0
-			header[3] = 0
-			header[4] = byte(n >> 24)
-			header[5] = byte(n >> 16)
-			header[6] = byte(n >> 8)
-			header[7] = byte(n)
-			if _, werr := dst.Write(header); werr != nil {
-				return
-			}
-			if _, werr := dst.Write(buf[:n]); werr != nil {
-				return
-			}
-			if flusher != nil {
-				flusher.Flush()
-			}
-		}
-		if err != nil {
-			return
-		}
-	}
-}
-
 type execEntry struct {
 	containerID string
 	config      ExecConfig
 	running     bool
 	exitCode    int
+	finishedAt  time.Time
+}
+
+// execStoreTTL bounds how long a finished exec entry is retained for a later
+// /exec/{id}/json inspect. Without eviction the store grows unbounded in a
+// long-lived daemon under compose healthchecks that exec every few seconds.
+const execStoreTTL = 10 * time.Minute
+
+// pruneExecStore evicts finished exec entries older than execStoreTTL. Called
+// on each exec create so the sweep cost is amortized and the map stays bounded.
+func pruneExecStore() {
+	now := time.Now()
+	execStore.Range(func(k, v any) bool {
+		e := v.(execEntry)
+		if !e.running && !e.finishedAt.IsZero() && now.Sub(e.finishedAt) > execStoreTTL {
+			execStore.Delete(k)
+		}
+		return true
+	})
 }
 
 func getString(m map[string]any, keys ...string) string {

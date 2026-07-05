@@ -23,6 +23,7 @@ type stubRuntime struct {
 	execStream       func(ctx context.Context, args ...string) (io.ReadCloser, error)
 	execStreamSplit  func(ctx context.Context, args ...string) (io.ReadCloser, io.ReadCloser, error)
 	imageList        func(ctx context.Context) ([]engine.ImageInfo, error)
+	imagePull        func(ctx context.Context, image string, opts engine.ImagePullOpts) error
 	networkList      func(ctx context.Context) ([]engine.NetworkInfo, error)
 	volumeList       func(ctx context.Context) ([]engine.VolumeInfo, error)
 	networkCreate    func(ctx context.Context, name string, labels map[string]string) error
@@ -98,17 +99,20 @@ func (s *stubRuntime) ContainerInspect(ctx context.Context, nameOrID string) ([]
 	return nil, nil
 }
 func (s *stubRuntime) ImagePull(ctx context.Context, image string, opts engine.ImagePullOpts) error {
+	if s.imagePull != nil {
+		return s.imagePull(ctx, image, opts)
+	}
 	return nil
 }
-func (s *stubRuntime) ImagePush(ctx context.Context, image string) error         { return nil }
+func (s *stubRuntime) ImagePush(ctx context.Context, image string) error { return nil }
 func (s *stubRuntime) ImageList(ctx context.Context) ([]engine.ImageInfo, error) {
 	if s.imageList != nil {
 		return s.imageList(ctx)
 	}
 	return nil, nil
 }
-func (s *stubRuntime) ImageRemove(ctx context.Context, image string) error       { return nil }
-func (s *stubRuntime) ImageBuild(ctx context.Context, args []string) error       { return nil }
+func (s *stubRuntime) ImageRemove(ctx context.Context, image string) error { return nil }
+func (s *stubRuntime) ImageBuild(ctx context.Context, args []string) error { return nil }
 func (s *stubRuntime) NetworkCreate(ctx context.Context, name string, labels map[string]string) error {
 	if s.networkCreate != nil {
 		return s.networkCreate(ctx, name, labels)

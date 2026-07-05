@@ -12,16 +12,17 @@ import (
 // filter category (label, name, id, status, …) to either a list of match
 // strings or a map[string]bool "set". Compose v2 uses the map form:
 //
-//   {"label": {"com.docker.compose.project=tmf": true,
-//              "com.docker.compose.service=server": true,
-//              "com.docker.compose.config-hash": true}}
+//	{"label": {"com.docker.compose.project=tmf": true,
+//	           "com.docker.compose.service=server": true,
+//	           "com.docker.compose.config-hash": true}}
 //
 // Each label entry is either "key=value" (exact match) or a bare "key"
 // (presence check).
 type listFilters struct {
-	labels []labelConstraint
-	names  []string
-	ids    []string
+	labels   []labelConstraint
+	names    []string
+	ids      []string
+	statuses []string
 }
 
 type labelConstraint struct {
@@ -31,6 +32,8 @@ type labelConstraint struct {
 }
 
 func (f *listFilters) match(c engine.ContainerInfo) bool {
+	// Labels are ANDed across distinct constraints — Docker requires every
+	// requested label to be present (and equal, when a value is given).
 	for _, cst := range f.labels {
 		v, ok := c.Labels[cst.key]
 		if !ok {
@@ -40,17 +43,44 @@ func (f *listFilters) match(c engine.ContainerInfo) bool {
 			return false
 		}
 	}
-	for _, want := range f.names {
+	// Within a single filter key (name, id, status) Docker ORs the values:
+	// the container matches if it satisfies ANY of them. Distinct keys are
+	// still ANDed (handled by the sequential returns below).
+	if len(f.names) > 0 {
+		name := strings.TrimPrefix(c.Name, "/")
 		found := false
-		if strings.TrimPrefix(c.Name, "/") == strings.TrimPrefix(want, "/") {
-			found = true
+		for _, want := range f.names {
+			if name == strings.TrimPrefix(want, "/") {
+				found = true
+				break
+			}
 		}
 		if !found {
 			return false
 		}
 	}
-	for _, want := range f.ids {
-		if c.ID != want && !strings.HasPrefix(c.ID, want) {
+	if len(f.ids) > 0 {
+		found := false
+		for _, want := range f.ids {
+			if c.ID == want || strings.HasPrefix(c.ID, want) {
+				found = true
+				break
+			}
+		}
+		if !found {
+			return false
+		}
+	}
+	if len(f.statuses) > 0 {
+		state := deriveContainerState(c.State, c.Status)
+		found := false
+		for _, want := range f.statuses {
+			if state == strings.ToLower(strings.TrimSpace(want)) {
+				found = true
+				break
+			}
+		}
+		if !found {
 			return false
 		}
 	}
@@ -83,6 +113,8 @@ func parseListFilters(raw string) (listFilters, error) {
 			f.names = append(f.names, entries...)
 		case "id":
 			f.ids = append(f.ids, entries...)
+		case "status":
+			f.statuses = append(f.statuses, entries...)
 		}
 		// Unknown filter categories are silently ignored — the spec allows
 		// unknown filters to pass through and we don't want compose to

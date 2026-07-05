@@ -492,9 +492,11 @@ func TestDockerCompat_ExecStart_HijackedStream(t *testing.T) {
 	// request, and assert on the raw response bytes.
 
 	srv := NewServer(&stubRuntime{
-		execStream: func(ctx context.Context, args ...string) (io.ReadCloser, error) {
-			// Simulate the command "echo hi" by returning hi+newline.
-			return io.NopCloser(strings.NewReader("hi\n")), nil
+		// Non-TTY exec now frames stdout/stderr separately via
+		// ExecStreamSplit (stderr gets its own stream type instead of being
+		// dropped). Simulate "echo hi" on stdout with an empty stderr.
+		execStreamSplit: func(ctx context.Context, args ...string) (io.ReadCloser, io.ReadCloser, error) {
+			return io.NopCloser(strings.NewReader("hi\n")), io.NopCloser(bytes.NewReader(nil)), nil
 		},
 	}, "")
 
@@ -705,7 +707,7 @@ func TestDockerCompat_ContainerInspect_NoNilPointers(t *testing.T) {
 	// and the reshape should still produce a safe-to-deref result.
 	payloads := []string{
 		`[{"Id":"a"}]`,
-		`[{"id":"b","status":"running"}]`,                        // Apple flat
+		`[{"id":"b","status":"running"}]`, // Apple flat
 		`[{"Id":"c","State":null,"Config":null,"HostConfig":null}]`, // explicit nulls
 	}
 

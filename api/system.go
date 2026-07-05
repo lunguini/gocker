@@ -15,7 +15,7 @@ func (s *Server) handlePing(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) handleVersion(w http.ResponseWriter, r *http.Request) {
 	resp := VersionResponse{
-		Version:    "gocker-0.1.0",
+		Version:    s.version,
 		APIVersion: "1.41",
 		OS:         runtime.GOOS,
 		Arch:       runtime.GOARCH,
@@ -36,7 +36,7 @@ func (s *Server) handleInfo(w http.ResponseWriter, r *http.Request) {
 		OSType:        runtime.GOOS,
 		Arch:          runtime.GOARCH,
 		Name:          hostname,
-		ServerVersion: "gocker-0.1.0",
+		ServerVersion: s.version,
 	}
 	writeJSON(w, http.StatusOK, resp)
 }
@@ -60,9 +60,9 @@ func (s *Server) handleSystemDf(w http.ResponseWriter, r *http.Request) {
 			"RepoTags":    []string{repoTag},
 			"RepoDigests": []string{},
 			"Created":     img.Created.Unix(),
-			"Size":        0,
+			"Size":        img.SizeBytes,
 			"SharedSize":  0,
-			"VirtualSize": 0,
+			"VirtualSize": img.SizeBytes,
 			"Labels":      map[string]string{},
 			"Containers":  int64(-1),
 		})

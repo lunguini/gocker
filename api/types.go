@@ -43,17 +43,17 @@ type EndpointSettings struct {
 }
 
 type ContainerConfig struct {
-	Image string            `json:"Image"`
-	Cmd   []string          `json:"Cmd,omitempty"`
-	Env   []string          `json:"Env,omitempty"`
-	Tty   bool              `json:"Tty"`
+	Image  string            `json:"Image"`
+	Cmd    []string          `json:"Cmd,omitempty"`
+	Env    []string          `json:"Env,omitempty"`
+	Tty    bool              `json:"Tty"`
 	Labels map[string]string `json:"Labels,omitempty"`
 }
 
 type HostConfig struct {
-	Binds        []string               `json:"Binds,omitempty"`
-	PortBindings map[string][]PortBind  `json:"PortBindings,omitempty"`
-	NetworkMode  string                 `json:"NetworkMode"`
+	Binds        []string              `json:"Binds,omitempty"`
+	PortBindings map[string][]PortBind `json:"PortBindings,omitempty"`
+	NetworkMode  string                `json:"NetworkMode"`
 }
 
 type PortBind struct {
@@ -87,11 +87,11 @@ type VersionResponse struct {
 }
 
 type InfoResponse struct {
-	Containers int    `json:"Containers"`
-	Images     int    `json:"Images"`
-	OSType     string `json:"OSType"`
-	Arch       string `json:"Architecture"`
-	Name       string `json:"Name"`
+	Containers    int    `json:"Containers"`
+	Images        int    `json:"Images"`
+	OSType        string `json:"OSType"`
+	Arch          string `json:"Architecture"`
+	Name          string `json:"Name"`
 	ServerVersion string `json:"ServerVersion"`
 }
 
@@ -142,6 +142,12 @@ type ExecConfig struct {
 	AttachStderr bool     `json:"AttachStderr"`
 	Tty          bool     `json:"Tty"`
 	Cmd          []string `json:"Cmd"`
+	// Env, WorkingDir and User were previously absent from this struct, so
+	// clients that set them (docker exec -e/-w/-u) had them silently dropped.
+	// They are now decoded and forwarded to the backend exec as -e/-w/-u.
+	Env        []string `json:"Env,omitempty"`
+	WorkingDir string   `json:"WorkingDir,omitempty"`
+	User       string   `json:"User,omitempty"`
 }
 
 type ExecCreateResponse struct {
