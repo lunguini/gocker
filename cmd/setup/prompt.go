@@ -10,7 +10,7 @@ import (
 	"strconv"
 	"strings"
 
-	"golang.org/x/term"
+	"github.com/lunguini/gocker/internal/termx"
 )
 
 // stdinReader is a package-level shared reader so chained prompts don't lose
@@ -19,7 +19,7 @@ var stdinReader = bufio.NewReader(os.Stdin)
 
 // IsInteractive returns true if stdin is a terminal.
 func IsInteractive() bool {
-	return term.IsTerminal(int(os.Stdin.Fd()))
+	return termx.StdinIsTTY()
 }
 
 // NormalizeTerminal forces the terminal into the standard line-editing

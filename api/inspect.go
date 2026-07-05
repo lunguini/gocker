@@ -12,6 +12,8 @@ import (
 	dockernetwork "github.com/docker/docker/api/types/network"
 	dockervolume "github.com/docker/docker/api/types/volume"
 	"github.com/docker/go-connections/nat"
+
+	"github.com/lunguini/gocker/internal/jsonx"
 )
 
 // initNilCollections walks v via reflection and initializes every nil slice
@@ -26,7 +28,7 @@ import (
 // automatically, without us having to enumerate every field.
 func initNilCollections(v reflect.Value) {
 	switch v.Kind() {
-	case reflect.Ptr, reflect.Interface:
+	case reflect.Pointer, reflect.Interface:
 		if !v.IsNil() {
 			initNilCollections(v.Elem())
 		}
@@ -101,7 +103,7 @@ func reshapeContainerInspect(raw []byte) (dockertypes.ContainerJSON, error) {
 	// in what we can from the raw map.
 	if c.State != nil && c.State.Status == "" {
 		if m := rawAsMap(raw); m != nil {
-			if s := getString(m, "status", "Status"); s != "" {
+			if s := jsonx.GetString(m, "status", "Status"); s != "" {
 				c.State.Status = s
 				c.State.Running = strings.EqualFold(s, "running")
 			}
@@ -301,16 +303,16 @@ func reshapeNetworkInspect(raw []byte, requestedID string) (dockertypes.NetworkR
 	// any field the SDK's lowercase-vs-capitalized tag-matching missed.
 	if m := rawAsMap(raw); m != nil {
 		if len(n.Labels) == 0 {
-			n.Labels = extractLabels(m)
+			n.Labels = jsonx.ExtractLabels(m)
 		}
 		if n.ID == "" {
-			n.ID = getString(m, "id", "ID", "Id")
+			n.ID = jsonx.GetString(m, "id", "ID", "Id")
 		}
 		if n.Name == "" {
-			n.Name = getString(m, "name", "Name", "id", "ID", "Id")
+			n.Name = jsonx.GetString(m, "name", "Name", "id", "ID", "Id")
 		}
 		if n.Driver == "" {
-			n.Driver = getString(m, "driver", "Driver")
+			n.Driver = jsonx.GetString(m, "driver", "Driver")
 		}
 	}
 	ensureNonNilNetworkResource(&n)
@@ -337,11 +339,11 @@ func buildNetworkFromApple(raw []byte, requestedID string) (dockertypes.NetworkR
 	}
 	m := apple[0]
 	n := dockertypes.NetworkResource{
-		ID:     getString(m, "id", "ID", "Id"),
-		Name:   getString(m, "name", "Name", "id", "ID"),
-		Driver: getString(m, "driver", "Driver"),
+		ID:     jsonx.GetString(m, "id", "ID", "Id"),
+		Name:   jsonx.GetString(m, "name", "Name", "id", "ID"),
+		Driver: jsonx.GetString(m, "driver", "Driver"),
 		Scope:  "local",
-		Labels: extractLabels(m),
+		Labels: jsonx.ExtractLabels(m),
 	}
 	if n.Name == "" {
 		n.Name = requestedID
@@ -407,16 +409,16 @@ func reshapeVolumeInspect(raw []byte, requestedName string) (dockervolume.Volume
 	// `Mountpoint`, and labels may be case-sensitive differently.
 	if m := rawAsMap(raw); m != nil {
 		if v.Mountpoint == "" {
-			v.Mountpoint = getString(m, "source", "Source", "mountpoint", "Mountpoint")
+			v.Mountpoint = jsonx.GetString(m, "source", "Source", "mountpoint", "Mountpoint")
 		}
 		if v.Driver == "" {
-			v.Driver = getString(m, "driver", "Driver")
+			v.Driver = jsonx.GetString(m, "driver", "Driver")
 		}
 		if v.Name == "" {
-			v.Name = getString(m, "name", "Name")
+			v.Name = jsonx.GetString(m, "name", "Name")
 		}
 		if len(v.Labels) == 0 {
-			v.Labels = extractLabels(m)
+			v.Labels = jsonx.ExtractLabels(m)
 		}
 	}
 	if v.Name == "" {
@@ -440,12 +442,12 @@ func buildVolumeFromApple(raw []byte, requestedName string) (dockervolume.Volume
 	}
 	m := apple[0]
 	v := dockervolume.Volume{
-		Name:       getString(m, "name", "Name"),
-		Driver:     getString(m, "driver", "Driver"),
-		Mountpoint: getString(m, "mountpoint", "Mountpoint", "source", "Source"),
-		CreatedAt:  getString(m, "createdAt", "CreatedAt", "created", "Created"),
+		Name:       jsonx.GetString(m, "name", "Name"),
+		Driver:     jsonx.GetString(m, "driver", "Driver"),
+		Mountpoint: jsonx.GetString(m, "mountpoint", "Mountpoint", "source", "Source"),
+		CreatedAt:  jsonx.GetString(m, "createdAt", "CreatedAt", "created", "Created"),
 		Scope:      "local",
-		Labels:     extractLabels(m),
+		Labels:     jsonx.ExtractLabels(m),
 	}
 	if v.Name == "" {
 		v.Name = requestedName

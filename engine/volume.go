@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"strings"
 	"time"
+
+	"github.com/lunguini/gocker/internal/jsonx"
 )
 
 func (e *Engine) VolumeCreate(ctx context.Context, name string) error {
@@ -32,7 +34,7 @@ func parseVolumeListJSON(data []byte) ([]VolumeInfo, error) {
 	var volumes []map[string]any
 	if err := json.Unmarshal([]byte(trimmed), &volumes); err != nil {
 		volumes = nil
-		for _, line := range strings.Split(trimmed, "\n") {
+		for line := range strings.SplitSeq(trimmed, "\n") {
 			line = strings.TrimSpace(line)
 			if line == "" {
 				continue
@@ -48,12 +50,12 @@ func parseVolumeListJSON(data []byte) ([]VolumeInfo, error) {
 	var result []VolumeInfo
 	for _, v := range volumes {
 		info := VolumeInfo{
-			Name:       getString(v, "name", "Name"),
-			Driver:     getString(v, "driver", "Driver"),
-			Mountpoint: getString(v, "mountpoint", "Mountpoint"),
-			Labels:     extractLabelsFromAny(v),
+			Name:       jsonx.GetString(v, "name", "Name"),
+			Driver:     jsonx.GetString(v, "driver", "Driver"),
+			Mountpoint: jsonx.GetString(v, "mountpoint", "Mountpoint"),
+			Labels:     jsonx.ExtractLabelsFromAny(v),
 		}
-		if created := getString(v, "created", "Created", "createdAt", "CreatedAt"); created != "" {
+		if created := jsonx.GetString(v, "created", "Created", "createdAt", "CreatedAt"); created != "" {
 			if t, err := time.Parse(time.RFC3339, created); err == nil {
 				info.Created = t
 			}

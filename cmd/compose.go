@@ -9,9 +9,9 @@ import (
 	"github.com/lunguini/gocker/compose"
 	"github.com/lunguini/gocker/config"
 	"github.com/lunguini/gocker/engine"
+	"github.com/lunguini/gocker/internal/termx"
 	"github.com/lunguini/gocker/sharedvm"
 	"github.com/urfave/cli/v3"
-	"golang.org/x/term"
 )
 
 func newComposeCmd(eng engine.Runtime) *cli.Command {
@@ -84,7 +84,7 @@ func rawComposeArgs() []string {
 // only — a service literally named "exec" passed as an argument won't trigger
 // injection.
 func addNoTTYIfNeeded(args []string) []string {
-	if isTerminal() {
+	if termx.StdinIsTTY() {
 		return args
 	}
 	idx := composeSubcommandIndex(args)
@@ -138,8 +138,8 @@ func extractProjectName(_ *cli.Command, args []string) string {
 		if (a == "--project-name" || a == "-p") && i+1 < len(args) {
 			return args[i+1]
 		}
-		if strings.HasPrefix(a, "--project-name=") {
-			return strings.TrimPrefix(a, "--project-name=")
+		if v, ok := strings.CutPrefix(a, "--project-name="); ok {
+			return v
 		}
 	}
 	return ""
@@ -151,18 +151,10 @@ func isInteractiveCompose(args []string) bool {
 	if idx := composeSubcommandIndex(args); idx >= 0 {
 		switch args[idx] {
 		case "exec", "run":
-			return isTerminal()
+			return termx.StdinIsTTY()
 		}
 	}
 	return false
-}
-
-// isTerminal reports whether stdin is a real terminal. It uses term.IsTerminal
-// rather than os.ModeCharDevice, which also matches /dev/null and would
-// misjudge a `stdin=/dev/null` harness as interactive (see the TTY notes in
-// sharedvm/runtime.go).
-func isTerminal() bool {
-	return term.IsTerminal(int(os.Stdin.Fd()))
 }
 
 func isComposeDown(args []string) bool {

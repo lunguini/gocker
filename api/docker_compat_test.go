@@ -822,7 +822,7 @@ func TestDockerCompat_ContainerInspect_NoNilPointers(t *testing.T) {
 func checkAllPointersNonNil(t *testing.T, path string, v reflect.Value) {
 	t.Helper()
 	switch v.Kind() {
-	case reflect.Ptr:
+	case reflect.Pointer:
 		if v.IsNil() {
 			// Only flag nil struct-pointers. Pointer-to-primitive is a
 			// legitimate Docker "unset" sentinel.

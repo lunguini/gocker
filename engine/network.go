@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"sort"
 	"strings"
+
+	"github.com/lunguini/gocker/internal/jsonx"
 )
 
 func (e *Engine) NetworkCreate(ctx context.Context, name string, labels map[string]string) error {
@@ -53,7 +55,7 @@ func parseNetworkListJSON(data []byte) ([]NetworkInfo, error) {
 	var networks []map[string]any
 	if err := json.Unmarshal([]byte(trimmed), &networks); err != nil {
 		networks = nil
-		for _, line := range strings.Split(trimmed, "\n") {
+		for line := range strings.SplitSeq(trimmed, "\n") {
 			line = strings.TrimSpace(line)
 			if line == "" {
 				continue
@@ -72,56 +74,20 @@ func parseNetworkListJSON(data []byte) ([]NetworkInfo, error) {
 		// and doesn't expose a separate "name" field — id IS the name.
 		// Fall back to id when name is absent so callers have something
 		// to address the network by.
-		name := getString(n, "name", "Name")
-		id := getString(n, "id", "ID", "Id")
+		name := jsonx.GetString(n, "name", "Name")
+		id := jsonx.GetString(n, "id", "ID", "Id")
 		if name == "" {
 			name = id
 		}
 		result = append(result, NetworkInfo{
 			ID:     id,
 			Name:   name,
-			Driver: getString(n, "driver", "Driver"),
-			Scope:  getString(n, "scope", "Scope"),
-			Labels: extractLabelsFromAny(n),
+			Driver: jsonx.GetString(n, "driver", "Driver"),
+			Scope:  jsonx.GetString(n, "scope", "Scope"),
+			Labels: jsonx.ExtractLabelsFromAny(n),
 		})
 	}
 	return result, nil
-}
-
-// extractLabelsFromAny pulls a labels map out of a raw JSON object, checking
-// the common top-level keys and Apple Container CLI's nested config.labels
-// location. Returns a non-nil map so JSON marshal emits `{}` instead of
-// `null` — Docker SDK clients sometimes choke on null labels.
-func extractLabelsFromAny(m map[string]any) map[string]string {
-	check := func(mp map[string]any, keys ...string) map[string]string {
-		for _, k := range keys {
-			raw, ok := mp[k]
-			if !ok {
-				continue
-			}
-			if lm, ok := raw.(map[string]any); ok && len(lm) > 0 {
-				out := make(map[string]string, len(lm))
-				for k2, v := range lm {
-					if s, ok := v.(string); ok {
-						out[k2] = s
-					}
-				}
-				return out
-			}
-		}
-		return nil
-	}
-	if out := check(m, "labels", "Labels"); out != nil {
-		return out
-	}
-	for _, nestedKey := range []string{"config", "Config"} {
-		if nested, ok := m[nestedKey].(map[string]any); ok {
-			if out := check(nested, "labels", "Labels"); out != nil {
-				return out
-			}
-		}
-	}
-	return map[string]string{}
 }
 
 func (e *Engine) NetworkRemove(ctx context.Context, name string) error {

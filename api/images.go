@@ -3,6 +3,7 @@ package api
 import (
 	"encoding/json"
 	"net/http"
+	"slices"
 	"strings"
 	"time"
 
@@ -158,16 +159,11 @@ func imageRefMatches(img engine.ImageInfo, ref string) bool {
 	// Also contract the stored Name down to the short form for the
 	// reverse case (request uses short, stored is qualified).
 	for _, prefix := range []string{"docker.io/library/", "docker.io/"} {
-		if short := strings.TrimPrefix(img.Name, prefix); short != img.Name {
+		if short, ok := strings.CutPrefix(img.Name, prefix); ok {
 			candidates = append(candidates, short, short+":"+img.Tag)
 		}
 	}
-	for _, c := range candidates {
-		if ref == c {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(candidates, ref)
 }
 
 func (s *Server) handleImageRemove(w http.ResponseWriter, r *http.Request) {

@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/lunguini/gocker/engine"
+	"github.com/lunguini/gocker/internal/jsonx"
 )
 
 var (
@@ -453,21 +454,8 @@ func (s *Server) containerState(ctx context.Context, id string) (string, error) 
 		if arrErr := json.Unmarshal(data, &arr); arrErr != nil || len(arr) == 0 {
 			return "", fmt.Errorf("parse inspect: %w", err)
 		}
-		obj = arr[0]
 	}
-	if state, ok := obj["State"].(map[string]any); ok {
-		if s, ok := state["Status"].(string); ok {
-			return strings.ToLower(s), nil
-		}
-	}
-	// Fallback for flat Apple CLI inspects.
-	if s, ok := obj["status"].(string); ok {
-		return strings.ToLower(s), nil
-	}
-	if s, ok := obj["State"].(string); ok {
-		return strings.ToLower(s), nil
-	}
-	return "", nil
+	return strings.ToLower(jsonx.InspectStatus(data)), nil
 }
 
 func (s *Server) handleExecCreate(w http.ResponseWriter, r *http.Request) {
@@ -509,7 +497,7 @@ func (s *Server) handleExecStart(w http.ResponseWriter, r *http.Request) {
 	}
 	// Tty can be set at create OR start time; the start value wins if present.
 	tty := entry.config.Tty || req.Tty
-	execArgs := buildExecArgs(entry, tty)
+	execArgs := buildExecArgs(entry)
 
 	if req.Detach {
 		// Detached run: fire-and-forget in the background. Use a background
@@ -586,9 +574,11 @@ func (s *Server) handleExecStart(w http.ResponseWriter, r *http.Request) {
 // Env/WorkingDir/User are forwarded as -e/-w/-u where the backend supports
 // them (nerdctl fully; Apple's `container exec` has no --user, so a User-set
 // exec surfaces a clear backend error there rather than being silently
-// dropped). The `-i` keeps stdin open on the backend side; see the stdin
+// dropped). The `-i` keeps stdin open on the backend side; `-t` is never
+// passed (outer -t breaks without a real pty — see CLAUDE.md); the caller's
+// tty flag only selects raw-copy vs framed output. See the stdin
 // limitation note in handleExecStart.
-func buildExecArgs(entry execEntry, tty bool) []string {
+func buildExecArgs(entry execEntry) []string {
 	args := []string{"exec", "-i"}
 	if entry.config.WorkingDir != "" {
 		args = append(args, "-w", entry.config.WorkingDir)
@@ -875,56 +865,4 @@ func pruneExecStore() {
 		}
 		return true
 	})
-}
-
-func getString(m map[string]any, keys ...string) string {
-	for _, k := range keys {
-		if v, ok := m[k]; ok {
-			return fmt.Sprintf("%v", v)
-		}
-	}
-	return ""
-}
-
-// extractStringMap pulls a map[string]string out of a raw inspect payload,
-// trying each candidate key (for the case-insensitive Apple CLI / nerdctl
-// naming split) and returning an empty (non-nil) map if nothing matches.
-// Non-string values are rendered via %v so the wire shape still satisfies
-// Docker SDK's strict decoders.
-func extractStringMap(m map[string]any, keys ...string) map[string]string {
-	for _, k := range keys {
-		raw, ok := m[k]
-		if !ok {
-			continue
-		}
-		if mm, ok := raw.(map[string]any); ok {
-			out := make(map[string]string, len(mm))
-			for k2, v := range mm {
-				out[k2] = fmt.Sprintf("%v", v)
-			}
-			return out
-		}
-	}
-	return map[string]string{}
-}
-
-// extractLabels is extractStringMap pinned to the "labels" / "Labels" keys,
-// with a fallback to `config.labels` which is where Apple's `container
-// network inspect` nests them. Compose relies on labels being passed
-// through verbatim to decide whether a network/volume is "its own" vs
-// foreign — returning an empty map causes compose to refuse its own
-// resources with "not created by Docker Compose, use external: true".
-func extractLabels(m map[string]any) map[string]string {
-	if labels := extractStringMap(m, "labels", "Labels"); len(labels) > 0 {
-		return labels
-	}
-	// Apple CLI: labels live under config.labels in network inspect output.
-	for _, nestedKey := range []string{"config", "Config"} {
-		if nested, ok := m[nestedKey].(map[string]any); ok {
-			if labels := extractStringMap(nested, "labels", "Labels"); len(labels) > 0 {
-				return labels
-			}
-		}
-	}
-	return map[string]string{}
 }

@@ -8,9 +8,8 @@ import (
 	"sort"
 	"strings"
 
-	"golang.org/x/term"
-
 	"github.com/lunguini/gocker/engine"
+	"github.com/lunguini/gocker/internal/termx"
 )
 
 // SharedVMRuntime implements engine.Runtime by proxying all operations
@@ -135,7 +134,7 @@ func (s *SharedVMRuntime) ContainerRun(ctx context.Context, args []string, inter
 	// the in-VM gocker in lockstep with every new flag we expose.
 	runArgs := append([]string{"run"}, translated...)
 	outer := []string{"exec"}
-	if interactive && stdinIsTTY() {
+	if interactive && termx.StdinIsTTY() {
 		outer = append(outer, "-i", "-t")
 	} else if interactive {
 		outer = append(outer, "-i")
@@ -282,7 +281,7 @@ func (s *SharedVMRuntime) ContainerLogs(ctx context.Context, nameOrID string, op
 	innerArgs = append(innerArgs, engine.LogsFlags(opts)...)
 	innerArgs = append(innerArgs, nameOrID)
 	outer := []string{"exec"}
-	if opts.Follow && stdinIsTTY() {
+	if opts.Follow && termx.StdinIsTTY() {
 		outer = append(outer, "-i", "-t")
 	} else {
 		outer = append(outer, "-i")
@@ -508,20 +507,13 @@ func (s *SharedVMRuntime) proxyArgs(interactive bool, gockerArgs ...string) []st
 	args := []string{"exec"}
 	if interactive {
 		args = append(args, "-i")
-		if stdinIsTTY() {
+		if termx.StdinIsTTY() {
 			args = append(args, "-t")
 		}
 	}
 	args = append(args, s.manager.Name(), "gocker")
 	args = append(args, gockerArgs...)
 	return args
-}
-
-// stdinIsTTY reports whether stdin is an actual terminal. os.ModeCharDevice
-// alone is insufficient — it also matches /dev/null and other character
-// devices. Apple's `container exec -t` only works against a real pty.
-func stdinIsTTY() bool {
-	return term.IsTerminal(int(os.Stdin.Fd()))
 }
 
 // proxySimple runs a simple gocker command in the VM and returns any error.

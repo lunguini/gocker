@@ -10,6 +10,8 @@ import (
 	"time"
 
 	"github.com/lunguini/gocker/engine"
+	"github.com/lunguini/gocker/internal/jsonx"
+	"github.com/lunguini/gocker/internal/termx"
 )
 
 // validSandboxName matches safe sandbox names: no path separators or
@@ -115,7 +117,7 @@ func (m *Manager) Run(ctx context.Context, opts RunOptions) error {
 	var args []string
 	if !opts.Detach {
 		args = append(args, "-i")
-		if engine.IsTerminal() {
+		if termx.StdinIsTTY() {
 			args = append(args, "-t")
 		}
 	}
@@ -173,7 +175,7 @@ func (m *Manager) Run(ctx context.Context, opts RunOptions) error {
 	args = append(args, entryCmd...)
 
 	// Run the container
-	interactive := !opts.Detach && engine.IsTerminal()
+	interactive := !opts.Detach && termx.StdinIsTTY()
 	if err := m.eng.ContainerRun(ctx, args, interactive); err != nil {
 		// Clean up orphaned container that may have been registered
 		// by the container CLI before the error occurred
@@ -253,28 +255,7 @@ func (m *Manager) getContainerStatus(ctx context.Context, nameOrID string) strin
 	if err != nil {
 		return ""
 	}
-	var raw map[string]any
-	if json.Unmarshal(data, &raw) != nil {
-		var arr []map[string]any
-		if json.Unmarshal(data, &arr) == nil && len(arr) > 0 {
-			raw = arr[0]
-		}
-	}
-	if status, ok := raw["status"].(string); ok {
-		return status
-	}
-	// Try nested format (e.g. Apple's "configuration"/"state" wrappers).
-	s := string(data)
-	for _, candidate := range []string{`"status":"`, `"Status":"`} {
-		if idx := strings.Index(s, candidate); idx != -1 {
-			start := idx + len(candidate)
-			end := strings.Index(s[start:], `"`)
-			if end != -1 {
-				return s[start : start+end]
-			}
-		}
-	}
-	return ""
+	return jsonx.InspectStatus(data)
 }
 
 func (m *Manager) List() ([]*SandboxState, error) {

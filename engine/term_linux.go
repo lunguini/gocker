@@ -28,11 +28,3 @@ func restoreTermState(state *termState) {
 	fd := int(os.Stdin.Fd())
 	_, _, _ = syscall.Syscall(syscall.SYS_IOCTL, uintptr(fd), uintptr(syscall.TCSETS), uintptr(unsafe.Pointer(&state.termios)))
 }
-
-// IsTerminal reports whether stdin is connected to a terminal.
-func IsTerminal() bool {
-	fd := int(os.Stdin.Fd())
-	var t syscall.Termios
-	_, _, errno := syscall.Syscall(syscall.SYS_IOCTL, uintptr(fd), uintptr(syscall.TCGETS), uintptr(unsafe.Pointer(&t)))
-	return errno == 0
-}

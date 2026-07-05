@@ -3,18 +3,20 @@ package engine
 import (
 	"context"
 	"encoding/json"
-	"os"
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/lunguini/gocker/internal/jsonx"
+	"github.com/lunguini/gocker/internal/termx"
 )
 
 func (e *Engine) ImagePull(ctx context.Context, image string, opts ImagePullOpts) error {
-	args := buildPullArgs(image, opts, isStdoutTTY())
+	args := buildPullArgs(image, opts, termx.StdoutIsTTY())
 	// Non-TTY path is almost always the daemon — ExecInteractive's output
 	// goes to os.Stdout/Stderr which is /dev/null for the daemon, so errors
 	// vanish and the HTTP client just sees "exit status 1". Capture instead.
-	if !isStdoutTTY() {
+	if !termx.StdoutIsTTY() {
 		stdout, stderr, err := e.Exec(ctx, args...)
 		if err != nil {
 			return wrapRunErr("container image pull", args, stdout, stderr, err)
@@ -46,15 +48,6 @@ func buildPullArgs(image string, opts ImagePullOpts, isTTY bool) []string {
 	return args
 }
 
-// isStdoutTTY returns true when os.Stdout is a terminal (character device).
-func isStdoutTTY() bool {
-	fi, err := os.Stdout.Stat()
-	if err != nil {
-		return false
-	}
-	return (fi.Mode() & os.ModeCharDevice) != 0
-}
-
 func (e *Engine) ImagePush(ctx context.Context, image string) error {
 	return e.ExecInteractive(ctx, "image", "push", image)
 }
@@ -76,7 +69,7 @@ func parseImageListJSON(data []byte) ([]ImageInfo, error) {
 	var images []map[string]any
 	if err := json.Unmarshal([]byte(trimmed), &images); err != nil {
 		images = nil
-		for _, line := range strings.Split(trimmed, "\n") {
+		for line := range strings.SplitSeq(trimmed, "\n") {
 			line = strings.TrimSpace(line)
 			if line == "" {
 				continue
@@ -91,29 +84,29 @@ func parseImageListJSON(data []byte) ([]ImageInfo, error) {
 
 	var result []ImageInfo
 	for _, img := range images {
-		name := getString(img, "repository", "Repository", "name", "Name")
-		tag := getString(img, "tag", "Tag")
-		digest := getString(img, "digest", "Digest")
-		size := getString(img, "size", "Size")
-		created := getString(img, "created", "Created", "createdAt", "CreatedAt")
+		name := jsonx.GetString(img, "repository", "Repository", "name", "Name")
+		tag := jsonx.GetString(img, "tag", "Tag")
+		digest := jsonx.GetString(img, "digest", "Digest")
+		size := jsonx.GetString(img, "size", "Size")
+		created := jsonx.GetString(img, "created", "Created", "createdAt", "CreatedAt")
 
 		// Handle Apple container CLI nested format:
 		// { "reference": "docker.io/lib/img:tag", "descriptor": { "digest": "sha256:..." }, "fullSize": "28,9 MB" }
-		if ref := getString(img, "reference", "Reference"); ref != "" && name == "" {
+		if ref := jsonx.GetString(img, "reference", "Reference"); ref != "" && name == "" {
 			name, tag = parseReference(ref)
 		}
 		if desc, ok := img["descriptor"].(map[string]any); ok {
 			if digest == "" {
-				digest = getString(desc, "digest", "Digest")
+				digest = jsonx.GetString(desc, "digest", "Digest")
 			}
 			if annotations, ok := desc["annotations"].(map[string]any); ok {
 				if created == "" {
-					created = getString(annotations, "org.opencontainers.image.created")
+					created = jsonx.GetString(annotations, "org.opencontainers.image.created")
 				}
 			}
 		}
 		if size == "" {
-			size = getString(img, "fullSize")
+			size = jsonx.GetString(img, "fullSize")
 		}
 
 		if tag == "" {
@@ -126,13 +119,13 @@ func parseImageListJSON(data []byte) ([]ImageInfo, error) {
 		}
 
 		info := ImageInfo{
-			ID:        getString(img, "id", "ID", "Id"),
+			ID:        jsonx.GetString(img, "id", "ID", "Id"),
 			Name:      name,
 			Tag:       tag,
 			Digest:    digest,
 			Size:      size,
 			SizeBytes: parseSizeString(size),
-			Arch:      getString(img, "arch", "Arch", "architecture", "Architecture"),
+			Arch:      jsonx.GetString(img, "arch", "Arch", "architecture", "Architecture"),
 		}
 		if info.ID == "" && digest != "" {
 			info.ID = digest

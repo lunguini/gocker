@@ -9,7 +9,7 @@ import (
 	"sync"
 	"time"
 
-	"golang.org/x/term"
+	"github.com/lunguini/gocker/internal/termx"
 )
 
 // Logger provides rolling terminal display and file-based request logging.
@@ -24,7 +24,7 @@ type Logger struct {
 // NewLogger creates a logger that shows the last maxShow lines on the terminal
 // and writes all entries to logFile. Pass "" for logFile to skip file logging.
 func NewLogger(maxShow int, logFile string) (*Logger, error) {
-	l := &Logger{maxShow: maxShow, isTTY: term.IsTerminal(int(os.Stderr.Fd()))}
+	l := &Logger{maxShow: maxShow, isTTY: termx.StderrIsTTY()}
 	if logFile != "" {
 		f, err := os.OpenFile(logFile, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)
 		if err != nil {
@@ -69,10 +69,7 @@ func (l *Logger) render() {
 	}
 	// Move cursor up to clear previous display, then rewrite.
 	// On first call there's nothing to clear, but ANSI codes handle that gracefully.
-	n := len(l.lines)
-	if n > l.maxShow {
-		n = l.maxShow
-	}
+	n := min(len(l.lines), l.maxShow)
 
 	var b strings.Builder
 	// Move up and clear previous lines
@@ -164,8 +161,7 @@ type logWriter struct {
 }
 
 func (w *logWriter) Write(p []byte) (int, error) {
-	lines := strings.Split(strings.TrimRight(string(p), "\n"), "\n")
-	for _, line := range lines {
+	for line := range strings.SplitSeq(strings.TrimRight(string(p), "\n"), "\n") {
 		line = strings.TrimSpace(line)
 		if line != "" {
 			w.logger.Log(fmt.Sprintf("%s %s%s",

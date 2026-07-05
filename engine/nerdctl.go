@@ -10,6 +10,9 @@ import (
 	"os/exec"
 	"strings"
 	"time"
+
+	"github.com/lunguini/gocker/internal/jsonx"
+	"github.com/lunguini/gocker/internal/termx"
 )
 
 // NerdctlRuntime is the containerd/nerdctl backend (Linux).
@@ -158,16 +161,16 @@ func ParseNerdctlContainerList(data []byte) ([]ContainerInfo, error) {
 	var result []ContainerInfo
 	for _, obj := range objects {
 		info := ContainerInfo{
-			ID:      getString(obj, "ID", "id"),
-			Name:    getString(obj, "Names", "Name", "name"),
-			Image:   getString(obj, "Image", "image"),
-			Status:  getString(obj, "Status", "status"),
-			State:   getString(obj, "State", "state"),
-			Command: getString(obj, "Command", "command"),
-			Ports:   getString(obj, "Ports", "ports"),
-			Labels:  parseNerdctlLabels(getString(obj, "Labels", "labels")),
+			ID:      jsonx.GetString(obj, "ID", "id"),
+			Name:    jsonx.GetString(obj, "Names", "Name", "name"),
+			Image:   jsonx.GetString(obj, "Image", "image"),
+			Status:  jsonx.GetString(obj, "Status", "status"),
+			State:   jsonx.GetString(obj, "State", "state"),
+			Command: jsonx.GetString(obj, "Command", "command"),
+			Ports:   jsonx.GetString(obj, "Ports", "ports"),
+			Labels:  parseNerdctlLabels(jsonx.GetString(obj, "Labels", "labels")),
 		}
-		if created := getString(obj, "CreatedAt", "Created", "created"); created != "" {
+		if created := jsonx.GetString(obj, "CreatedAt", "Created", "created"); created != "" {
 			if t, err := time.Parse(time.RFC3339, created); err == nil {
 				info.Created = t
 			}
@@ -296,7 +299,7 @@ func (n *NerdctlRuntime) ImagePull(ctx context.Context, image string, opts Image
 	// Interactive for terminal users (shows progress); captured otherwise so
 	// daemon/API callers can surface the real error instead of a bare
 	// "exit status 1" with the stderr swallowed by /dev/null.
-	if isStdoutTTY() {
+	if termx.StdoutIsTTY() {
 		return n.ExecInteractive(ctx, args...)
 	}
 	stdout, stderr, err := n.Exec(ctx, args...)
@@ -334,14 +337,14 @@ func ParseNerdctlImageList(data []byte) ([]ImageInfo, error) {
 		// qualified form, so prefer Name — otherwise /images/{name}/json
 		// returns 404 for perfectly pulled images and compose bails with
 		// "image not found".
-		size := getString(obj, "Size", "size")
+		size := jsonx.GetString(obj, "Size", "size")
 		info := ImageInfo{
-			ID:        getString(obj, "ID", "id"),
-			Tag:       getString(obj, "Tag", "tag"),
+			ID:        jsonx.GetString(obj, "ID", "id"),
+			Tag:       jsonx.GetString(obj, "Tag", "tag"),
 			Size:      size,
 			SizeBytes: parseSizeString(size),
 		}
-		if full := getString(obj, "Name", "name"); full != "" {
+		if full := jsonx.GetString(obj, "Name", "name"); full != "" {
 			// Strip the trailing :tag (if any) so Name holds just the repo
 			// path and Tag stays consistent with the dedicated field.
 			if i := strings.LastIndex(full, ":"); i > strings.LastIndex(full, "/") {
@@ -354,12 +357,12 @@ func ParseNerdctlImageList(data []byte) ([]ImageInfo, error) {
 			}
 		}
 		if info.Name == "" {
-			info.Name = getString(obj, "Repository", "repository")
+			info.Name = jsonx.GetString(obj, "Repository", "repository")
 		}
 		if info.ID == "" {
-			info.ID = getString(obj, "Digest", "digest")
+			info.ID = jsonx.GetString(obj, "Digest", "digest")
 		}
-		if created := getString(obj, "CreatedAt", "Created", "created"); created != "" {
+		if created := jsonx.GetString(obj, "CreatedAt", "Created", "created"); created != "" {
 			if t, err := time.Parse(time.RFC3339, created); err == nil {
 				info.Created = t
 			}
@@ -416,8 +419,8 @@ func ParseNerdctlNetworkList(data []byte) ([]NetworkInfo, error) {
 		// Same name-id fallback as the Apple parser: some backends populate
 		// only one of the two. Never return an empty identifier — callers
 		// will try to pass "" to network rm/prune and get opaque errors.
-		name := getString(obj, "Name", "name")
-		id := getString(obj, "ID", "id")
+		name := jsonx.GetString(obj, "Name", "name")
+		id := jsonx.GetString(obj, "ID", "id")
 		if name == "" {
 			name = id
 		}
@@ -427,9 +430,9 @@ func ParseNerdctlNetworkList(data []byte) ([]NetworkInfo, error) {
 		result = append(result, NetworkInfo{
 			ID:     id,
 			Name:   name,
-			Driver: getString(obj, "Driver", "driver"),
-			Scope:  getString(obj, "Scope", "scope"),
-			Labels: extractLabelsFromAny(obj),
+			Driver: jsonx.GetString(obj, "Driver", "driver"),
+			Scope:  jsonx.GetString(obj, "Scope", "scope"),
+			Labels: jsonx.ExtractLabelsFromAny(obj),
 		})
 	}
 	return result, nil
@@ -496,10 +499,10 @@ func ParseNerdctlVolumeList(data []byte) ([]VolumeInfo, error) {
 	var result []VolumeInfo
 	for _, obj := range objects {
 		info := VolumeInfo{
-			Name:       getString(obj, "Name", "name"),
-			Driver:     getString(obj, "Driver", "driver"),
-			Mountpoint: getString(obj, "Mountpoint", "mountpoint"),
-			Labels:     extractLabelsFromAny(obj),
+			Name:       jsonx.GetString(obj, "Name", "name"),
+			Driver:     jsonx.GetString(obj, "Driver", "driver"),
+			Mountpoint: jsonx.GetString(obj, "Mountpoint", "mountpoint"),
+			Labels:     jsonx.ExtractLabelsFromAny(obj),
 		}
 		result = append(result, info)
 	}
@@ -535,7 +538,7 @@ func parseJSONObjects(data []byte) []map[string]any {
 
 	// Fall back to newline-delimited JSON objects
 	var objects []map[string]any
-	for _, line := range strings.Split(trimmed, "\n") {
+	for line := range strings.SplitSeq(trimmed, "\n") {
 		line = strings.TrimSpace(line)
 		if line == "" {
 			continue

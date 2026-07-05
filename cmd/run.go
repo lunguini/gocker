@@ -315,7 +315,7 @@ func readEnvFile(path string) ([]string, error) {
 		return nil, fmt.Errorf("reading env file: %w", err)
 	}
 	var envs []string
-	for _, line := range strings.Split(string(data), "\n") {
+	for line := range strings.SplitSeq(string(data), "\n") {
 		line = strings.TrimSpace(line)
 		if line == "" || strings.HasPrefix(line, "#") {
 			continue

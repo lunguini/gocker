@@ -147,8 +147,8 @@ func decodeFilterEntries(body json.RawMessage) ([]string, error) {
 }
 
 func parseLabelConstraint(entry string) labelConstraint {
-	if i := strings.Index(entry, "="); i >= 0 {
-		return labelConstraint{key: entry[:i], value: entry[i+1:], hasV: true}
+	if key, value, ok := strings.Cut(entry, "="); ok {
+		return labelConstraint{key: key, value: value, hasV: true}
 	}
 	return labelConstraint{key: entry}
 }

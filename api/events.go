@@ -3,6 +3,7 @@ package api
 import (
 	"encoding/json"
 	"net/http"
+	"slices"
 	"sync"
 	"time"
 )
@@ -102,26 +103,12 @@ func matchFilters(e Event, filters map[string][]string) bool {
 		return true
 	}
 	if types, ok := filters["type"]; ok && len(types) > 0 {
-		found := false
-		for _, t := range types {
-			if t == e.Type {
-				found = true
-				break
-			}
-		}
-		if !found {
+		if !slices.Contains(types, e.Type) {
 			return false
 		}
 	}
 	if actions, ok := filters["event"]; ok && len(actions) > 0 {
-		found := false
-		for _, a := range actions {
-			if a == e.Action {
-				found = true
-				break
-			}
-		}
-		if !found {
+		if !slices.Contains(actions, e.Action) {
 			return false
 		}
 	}

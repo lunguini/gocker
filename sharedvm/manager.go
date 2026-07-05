@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"maps"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -14,6 +15,8 @@ import (
 	"github.com/lunguini/gocker/config"
 	"github.com/lunguini/gocker/engine"
 	"github.com/lunguini/gocker/internal/fsutil"
+	"github.com/lunguini/gocker/internal/jsonx"
+	"github.com/lunguini/gocker/internal/termx"
 )
 
 // Manager handles the lifecycle of the persistent shared VM.
@@ -230,27 +233,8 @@ func (m *Manager) getContainerStatus(ctx context.Context) string {
 		}
 		return ""
 	}
-	// Apple's inspect output may be a JSON array or a single object.
-	var raw map[string]any
-	if json.Unmarshal(data, &raw) != nil {
-		var arr []map[string]any
-		if json.Unmarshal(data, &arr) == nil && len(arr) > 0 {
-			raw = arr[0]
-		}
-	}
-	if status, ok := raw["status"].(string); ok {
+	if status := jsonx.InspectStatus(data); status != "" {
 		return status
-	}
-	// Try nested format
-	s := string(data)
-	for _, candidate := range []string{`"status":"`, `"Status":"`} {
-		if idx := strings.Index(s, candidate); idx != -1 {
-			start := idx + len(candidate)
-			end := strings.Index(s[start:], `"`)
-			if end != -1 {
-				return s[start : start+end]
-			}
-		}
 	}
 	return "unknown"
 }
@@ -332,9 +316,7 @@ func (m *Manager) expandMountsLocked(ctx context.Context, paths []string) error 
 	// Compute the expanded mount set *without* mutating m.mounts yet — if the
 	// recreate fails, the map must still reflect the surviving VM's coverage.
 	newMounts := make(map[string]string, len(m.mounts)+len(needed))
-	for host, vm := range m.mounts {
-		newMounts[host] = vm
-	}
+	maps.Copy(newMounts, m.mounts)
 	for _, p := range needed {
 		newMounts[p] = "/host" + p
 	}
@@ -389,10 +371,7 @@ func (m *Manager) expandMountsLocked(ctx context.Context, paths []string) error 
 // dead/absent VM doesn't block expansion.
 func (m *Manager) vmStateSummary(ctx context.Context) (string, bool) {
 	running := m.countVMLines(ctx, "ps", "-q")
-	stopped := m.countVMLines(ctx, "ps", "-a", "-q") - running
-	if stopped < 0 {
-		stopped = 0
-	}
+	stopped := max(m.countVMLines(ctx, "ps", "-a", "-q")-running, 0)
 	images := m.countVMLines(ctx, "images", "-q")
 	if running == 0 && stopped == 0 && images == 0 {
 		return "", false
@@ -409,7 +388,7 @@ func (m *Manager) countVMLines(ctx context.Context, args ...string) int {
 		return 0
 	}
 	n := 0
-	for _, line := range strings.Split(string(stdout), "\n") {
+	for line := range strings.SplitSeq(string(stdout), "\n") {
 		if strings.TrimSpace(line) != "" {
 			n++
 		}
@@ -424,7 +403,7 @@ func confirmDestructiveRecreate(summary string) error {
 		return nil
 	}
 	msg := fmt.Sprintf("recreating the shared VM to add a bind mount will destroy everything inside it (%s)", summary)
-	if !stdinIsTTY() {
+	if !termx.StdinIsTTY() {
 		return fmt.Errorf("%s. Refusing without confirmation: re-run in a terminal to confirm, set GOCKER_ASSUME_YES=1, or add the path to sharedVM.workspaceDirs in ~/.gocker/config.yaml", msg)
 	}
 	fmt.Fprintf(os.Stderr, "Warning: %s.\nProceed? [y/N]: ", msg)

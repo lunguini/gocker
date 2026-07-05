@@ -3,11 +3,10 @@ package engine
 import (
 	"context"
 	"encoding/json"
-	"fmt"
-	"math"
-	"strconv"
 	"strings"
 	"time"
+
+	"github.com/lunguini/gocker/internal/jsonx"
 )
 
 func (e *Engine) ContainerRun(ctx context.Context, args []string, interactive bool) error {
@@ -57,7 +56,7 @@ func parseContainerListJSON(data []byte) ([]ContainerInfo, error) {
 	if err := json.Unmarshal([]byte(trimmed), &containers); err != nil {
 		// Try line-by-line JSON objects
 		containers = nil
-		for _, line := range strings.Split(trimmed, "\n") {
+		for line := range strings.SplitSeq(trimmed, "\n") {
 			line = strings.TrimSpace(line)
 			if line == "" {
 				continue
@@ -87,26 +86,26 @@ func containerInfoFromNested(c map[string]any) ContainerInfo {
 	}
 
 	info := ContainerInfo{
-		ID:     getString(config, "id"),
-		Name:   getString(config, "id"),
-		Status: getString(c, "status"),
-		State:  getString(c, "status"),
+		ID:     jsonx.GetString(config, "id"),
+		Name:   jsonx.GetString(config, "id"),
+		Status: jsonx.GetString(c, "status"),
+		State:  jsonx.GetString(c, "status"),
 	}
 
 	// Image reference: configuration.image.reference
 	if imgMap, ok := config["image"].(map[string]any); ok {
-		info.Image = getString(imgMap, "reference")
+		info.Image = jsonx.GetString(imgMap, "reference")
 	}
 
 	// Command: configuration.initProcess.executable
 	if initProc, ok := config["initProcess"].(map[string]any); ok {
-		info.Command = getString(initProc, "executable")
+		info.Command = jsonx.GetString(initProc, "executable")
 	}
 
 	// IP: first network's ipv4Address
 	if networks, ok := c["networks"].([]any); ok && len(networks) > 0 {
 		if net, ok := networks[0].(map[string]any); ok {
-			ip := getString(net, "ipv4Address")
+			ip := jsonx.GetString(net, "ipv4Address")
 			// Strip CIDR suffix (e.g., "192.168.64.3/24" -> "192.168.64.3")
 			if idx := strings.Index(ip, "/"); idx != -1 {
 				ip = ip[:idx]
@@ -122,29 +121,6 @@ func containerInfoFromNested(c map[string]any) ContainerInfo {
 	}
 
 	return info
-}
-
-// getString looks up the first of keys present in m with a non-null value
-// and renders it as a string. A key present with a JSON null value is
-// skipped rather than returned as the literal "<nil>" — the next candidate
-// key is checked instead. Numbers are formatted without exponent/decimal
-// noise (json.Unmarshal decodes all JSON numbers as float64, so an integral
-// ID like 12 would otherwise render as "1.2e+01"-style text via %v).
-func getString(m map[string]any, keys ...string) string {
-	for _, k := range keys {
-		v, ok := m[k]
-		if !ok || v == nil {
-			continue
-		}
-		if f, ok := v.(float64); ok {
-			if f == math.Trunc(f) && !math.IsInf(f, 0) {
-				return strconv.FormatFloat(f, 'f', -1, 64)
-			}
-			return strconv.FormatFloat(f, 'g', -1, 64)
-		}
-		return fmt.Sprintf("%v", v)
-	}
-	return ""
 }
 
 func (e *Engine) ContainerStop(ctx context.Context, nameOrID string) error {
