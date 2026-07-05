@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 )
 
@@ -20,10 +21,18 @@ func DefaultMounts(workspaceDirs []string) map[string]string {
 }
 
 // MountFlags returns -v flags for VM creation from the mount mapping.
+// Hosts are sorted so the generated create args are deterministic across runs
+// (a map iteration would otherwise reorder -v flags, adding noise when
+// comparing or debugging VM create commands).
 func MountFlags(mounts map[string]string) []string {
-	var flags []string
-	for host, vm := range mounts {
-		flags = append(flags, "-v", host+":"+vm)
+	hosts := make([]string, 0, len(mounts))
+	for host := range mounts {
+		hosts = append(hosts, host)
+	}
+	sort.Strings(hosts)
+	flags := make([]string, 0, len(mounts)*2)
+	for _, host := range hosts {
+		flags = append(flags, "-v", host+":"+mounts[host])
 	}
 	return flags
 }

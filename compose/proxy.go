@@ -4,6 +4,7 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 
 	"github.com/lunguini/gocker/engine"
@@ -62,11 +63,15 @@ func (p *Proxy) Exec(ctx context.Context, args []string, interactive bool) error
 	// device" errors for non-interactive compose commands.
 	execArgs := []string{"exec", "-i"}
 
-	// Forward environment variables that compose files may reference.
-	// Filter out system vars and translate host paths in values.
+	// Forward only environment variables the compose file(s) actually
+	// reference (plus COMPOSE_*/DOCKER_* controls), instead of dumping the
+	// whole host environment onto argv. This keeps unrelated secrets
+	// (AWS_SECRET_ACCESS_KEY, GITHUB_TOKEN, ...) out of the VM's ps-visible
+	// process table. Host paths in forwarded values are still translated.
+	allow := referencedEnvVars(args, cwd)
 	for _, env := range os.Environ() {
 		key, val, _ := strings.Cut(env, "=")
-		if shouldForwardEnv(key) {
+		if shouldForwardEnv(key, allow) {
 			val, _ = sharedvm.TranslatePath(val, mounts)
 			execArgs = append(execArgs, "-e", key+"="+val)
 		}
@@ -138,24 +143,61 @@ func hasFileFlag(args []string) bool {
 }
 
 // shouldForwardEnv returns true for environment variables that should be
-// forwarded into the VM for compose file variable substitution.
-func shouldForwardEnv(key string) bool {
-	// Skip system/shell vars that don't belong inside the VM.
-	switch key {
-	case "HOME", "USER", "LOGNAME", "SHELL", "TERM", "PATH",
-		"LANG", "LC_ALL", "LC_CTYPE", "TMPDIR", "DISPLAY",
-		"SSH_AUTH_SOCK", "SSH_AGENT_PID",
-		"COLORTERM", "TERM_PROGRAM", "TERM_PROGRAM_VERSION",
-		"XPC_FLAGS", "XPC_SERVICE_NAME",
-		"__CF_USER_TEXT_ENCODING", "__CFBundleIdentifier",
-		"COMMAND_MODE", "SECURITYSESSIONID",
-		"Apple_PubSub_Socket_Render",
-		"SHLVL", "OLDPWD", "PWD", "_":
-		return false
+// forwarded into the VM for compose file variable substitution. It is an
+// allowlist: a var is forwarded only if the compose file(s) reference it, or
+// it is a COMPOSE_*/DOCKER_* control variable that compose itself consumes.
+func shouldForwardEnv(key string, referenced map[string]bool) bool {
+	if referenced[key] {
+		return true
 	}
-	// Skip macOS-specific prefixes
-	if strings.HasPrefix(key, "DYLD_") || strings.HasPrefix(key, "MallocNano") {
-		return false
+	return strings.HasPrefix(key, "COMPOSE_") || strings.HasPrefix(key, "DOCKER_")
+}
+
+// envVarRef matches ${VAR}, ${VAR:-default} and $VAR references in a compose
+// file. The capture group is the bare variable name.
+var envVarRef = regexp.MustCompile(`\$\{?([A-Za-z_][A-Za-z0-9_]*)`)
+
+// referencedEnvVars scans the compose file(s) that will be used and returns
+// the set of environment variable names referenced via ${VAR}/$VAR. When no
+// -f/--file flag is given, it falls back to the default compose file names in
+// cwd. Files that can't be read are skipped — over-scanning is harmless, the
+// allowlist just won't gain entries it can't find.
+func referencedEnvVars(args []string, cwd string) map[string]bool {
+	set := map[string]bool{}
+	for _, f := range composeFilesToScan(args, cwd) {
+		if !filepath.IsAbs(f) && cwd != "" {
+			f = filepath.Join(cwd, f)
+		}
+		data, err := os.ReadFile(f)
+		if err != nil {
+			continue
+		}
+		for _, m := range envVarRef.FindAllSubmatch(data, -1) {
+			set[string(m[1])] = true
+		}
 	}
-	return true
+	return set
+}
+
+// composeFilesToScan resolves which compose files to scan for env references:
+// explicit -f/--file values when present, otherwise the standard candidate
+// names in cwd.
+func composeFilesToScan(args []string, cwd string) []string {
+	var files []string
+	for i, a := range args {
+		switch {
+		case a == "-f" || a == "--file":
+			if i+1 < len(args) {
+				files = append(files, args[i+1])
+			}
+		case strings.HasPrefix(a, "-f="):
+			files = append(files, strings.TrimPrefix(a, "-f="))
+		case strings.HasPrefix(a, "--file="):
+			files = append(files, strings.TrimPrefix(a, "--file="))
+		}
+	}
+	if len(files) == 0 {
+		files = []string{"compose.yaml", "compose.yml", "docker-compose.yml", "docker-compose.yaml"}
+	}
+	return files
 }

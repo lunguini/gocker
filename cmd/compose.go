@@ -11,6 +11,7 @@ import (
 	"github.com/lunguini/gocker/engine"
 	"github.com/lunguini/gocker/sharedvm"
 	"github.com/urfave/cli/v3"
+	"golang.org/x/term"
 )
 
 func newComposeCmd(eng engine.Runtime) *cli.Command {
@@ -77,19 +78,28 @@ func rawComposeArgs() []string {
 	return nil
 }
 
-// addNoTTYIfNeeded inserts -T after "exec" when stdin is not a terminal,
-// so nerdctl compose exec doesn't try to allocate a TTY.
+// addNoTTYIfNeeded inserts -T right after the compose subcommand when that
+// subcommand is "exec" or "run" and stdin is not a terminal, so nerdctl
+// compose doesn't try to allocate a TTY. It matches the subcommand position
+// only — a service literally named "exec" passed as an argument won't trigger
+// injection.
 func addNoTTYIfNeeded(args []string) []string {
 	if isTerminal() {
 		return args
 	}
-	var result []string
-	for i, a := range args {
-		result = append(result, a)
-		if a == "exec" && (i == 0 || !strings.HasPrefix(args[i-1], "-")) {
-			result = append(result, "-T")
-		}
+	idx := composeSubcommandIndex(args)
+	if idx < 0 {
+		return args
 	}
+	switch args[idx] {
+	case "exec", "run":
+	default:
+		return args
+	}
+	result := make([]string, 0, len(args)+1)
+	result = append(result, args[:idx+1]...)
+	result = append(result, "-T")
+	result = append(result, args[idx+1:]...)
 	return result
 }
 
@@ -138,27 +148,58 @@ func extractProjectName(_ *cli.Command, args []string) string {
 func isInteractiveCompose(args []string) bool {
 	// Only interactive if stdin is a terminal. Harbor runs exec with
 	// stdin=DEVNULL, so we shouldn't force -it on the outer container exec.
-	for _, a := range args {
-		if a == "exec" || a == "run" {
+	if idx := composeSubcommandIndex(args); idx >= 0 {
+		switch args[idx] {
+		case "exec", "run":
 			return isTerminal()
 		}
 	}
 	return false
 }
 
+// isTerminal reports whether stdin is a real terminal. It uses term.IsTerminal
+// rather than os.ModeCharDevice, which also matches /dev/null and would
+// misjudge a `stdin=/dev/null` harness as interactive (see the TTY notes in
+// sharedvm/runtime.go).
 func isTerminal() bool {
-	fi, err := os.Stdin.Stat()
-	if err != nil {
-		return false
-	}
-	return fi.Mode()&os.ModeCharDevice != 0
+	return term.IsTerminal(int(os.Stdin.Fd()))
 }
 
 func isComposeDown(args []string) bool {
-	for _, a := range args {
-		if a == "down" {
-			return true
+	idx := composeSubcommandIndex(args)
+	return idx >= 0 && args[idx] == "down"
+}
+
+// composeValueFlags are the compose *global* flags (before the subcommand)
+// that consume a following value. Used to skip past a flag's value when
+// locating the subcommand token.
+var composeValueFlags = map[string]bool{
+	"-f": true, "--file": true,
+	"-p": true, "--project-name": true,
+	"--project-directory": true,
+	"--profile":           true,
+	"--env-file":          true,
+	"--ansi":              true,
+	"--progress":          true,
+	"--parallel":          true,
+}
+
+// composeSubcommandIndex returns the index of the compose subcommand token
+// (up, down, exec, ...) in args, or -1 if none is present. It skips global
+// flags and their values so an argument that happens to equal a subcommand
+// name (e.g. a service named "down") is not mistaken for the subcommand.
+func composeSubcommandIndex(args []string) int {
+	for i := 0; i < len(args); i++ {
+		a := args[i]
+		if strings.HasPrefix(a, "-") {
+			// `--flag=value` carries its own value; a bare value flag consumes
+			// the next token.
+			if !strings.Contains(a, "=") && composeValueFlags[a] {
+				i++
+			}
+			continue
 		}
+		return i
 	}
-	return false
+	return -1
 }

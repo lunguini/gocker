@@ -120,6 +120,11 @@ func TestGetContainerStatus_InvalidJSON(t *testing.T) {
 // ---- EnsureRunning state machine tests ----
 
 func TestEnsureRunning_AlreadyRunning(t *testing.T) {
+	tmpDir := t.TempDir()
+	origStateDir := stateDir
+	stateDir = func() string { return tmpDir }
+	defer func() { stateDir = origStateDir }()
+
 	rt := &engine.MockRuntime{
 		ContainerInspectFunc: func(ctx context.Context, nameOrID string) ([]byte, error) {
 			return []byte(`[{"status":"running"}]`), nil
@@ -275,6 +280,11 @@ func TestEnsureRunning_InspectFails_ProbeSucceeds_SkipsCreate(t *testing.T) {
 }
 
 func TestEnsureRunning_StartFails(t *testing.T) {
+	tmpDir := t.TempDir()
+	origStateDir := stateDir
+	stateDir = func() string { return tmpDir }
+	defer func() { stateDir = origStateDir }()
+
 	rt := &engine.MockRuntime{
 		ContainerInspectFunc: func(ctx context.Context, nameOrID string) ([]byte, error) {
 			return []byte(`[{"status":"stopped"}]`), nil
@@ -348,6 +358,11 @@ func TestExpandMounts_AddsNewMount(t *testing.T) {
 }
 
 func TestExpandMounts_AlreadyCovered(t *testing.T) {
+	tmpDir := t.TempDir()
+	origStateDir := stateDir
+	stateDir = func() string { return tmpDir }
+	defer func() { stateDir = origStateDir }()
+
 	rt := &engine.MockRuntime{}
 	m := newTestManager(rt)
 	m.mounts = map[string]string{"/Users/adrian": "/host/Users/adrian"}
@@ -358,11 +373,24 @@ func TestExpandMounts_AlreadyCovered(t *testing.T) {
 	}
 }
 
-func TestExpandMounts_ContainersRunning(t *testing.T) {
+// When the VM holds state (containers/images) and the caller is
+// non-interactive with no override, recreation is refused rather than
+// silently destroying that state.
+func TestExpandMounts_VMHasState_NonInteractiveRefuses(t *testing.T) {
+	tmpDir := t.TempDir()
+	origStateDir := stateDir
+	stateDir = func() string { return tmpDir }
+	defer func() { stateDir = origStateDir }()
+
+	var runCalled bool
 	rt := &engine.MockRuntime{
 		ExecFunc: func(ctx context.Context, args ...string) ([]byte, []byte, error) {
-			// Simulate `container exec <vm> nerdctl ps -q` returning one container.
+			// Any nerdctl ps/images probe reports one item — the VM has state.
 			return []byte("abc123\n"), nil, nil
+		},
+		ContainerRunFunc: func(ctx context.Context, args []string, interactive bool) error {
+			runCalled = true
+			return nil
 		},
 	}
 	m := newTestManager(rt)
@@ -370,9 +398,55 @@ func TestExpandMounts_ContainersRunning(t *testing.T) {
 
 	err := m.ExpandMounts(context.Background(), []string{"/opt/data"})
 	if err == nil {
-		t.Fatal("expected error when containers are running")
+		t.Fatal("expected refusal when the VM holds state and no confirmation is available")
 	}
-	if !strings.Contains(err.Error(), "running in the shared VM") {
-		t.Errorf("expected error about running containers, got: %v", err)
+	if !strings.Contains(err.Error(), "Refusing without confirmation") {
+		t.Errorf("expected refusal error, got: %v", err)
+	}
+	if runCalled {
+		t.Error("VM must not be recreated without confirmation")
+	}
+	if _, ok := m.mounts["/opt/data"]; ok {
+		t.Error("mounts must not be mutated when recreation is refused")
+	}
+}
+
+// With GOCKER_ASSUME_YES set, the same state does not block recreation.
+func TestExpandMounts_VMHasState_AssumeYesProceeds(t *testing.T) {
+	tmpDir := t.TempDir()
+	origStateDir := stateDir
+	stateDir = func() string { return tmpDir }
+	defer func() { stateDir = origStateDir }()
+	t.Setenv("GOCKER_ASSUME_YES", "1")
+
+	var runCalled bool
+	rt := &engine.MockRuntime{
+		ContainerStopFunc: func(ctx context.Context, nameOrID string) error { return nil },
+		ContainerRemoveFunc: func(ctx context.Context, nameOrID string, force bool) error {
+			return nil
+		},
+		ContainerRunFunc: func(ctx context.Context, args []string, interactive bool) error {
+			runCalled = true
+			return nil
+		},
+		ExecFunc: func(ctx context.Context, args ...string) ([]byte, []byte, error) {
+			// State probes report an image; readiness probe after run succeeds.
+			if runCalled {
+				return nil, nil, nil
+			}
+			return []byte("img1\n"), nil, nil
+		},
+	}
+	m := newTestManager(rt)
+	m.mounts = map[string]string{"/Users/adrian": "/host/Users/adrian"}
+
+	if err := m.ExpandMounts(context.Background(), []string{"/opt/data"}); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !runCalled {
+		t.Error("expected VM to be recreated when GOCKER_ASSUME_YES is set")
+	}
+	if _, ok := m.mounts["/opt/data"]; !ok {
+		t.Error("expected /opt/data added to mounts after successful recreate")
 	}
 }

@@ -1,6 +1,7 @@
 package sharedvm
 
 import (
+	"bufio"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -12,6 +13,7 @@ import (
 
 	"github.com/lunguini/gocker/config"
 	"github.com/lunguini/gocker/engine"
+	"github.com/lunguini/gocker/internal/fsutil"
 )
 
 // Manager handles the lifecycle of the persistent shared VM.
@@ -60,6 +62,16 @@ func (m *Manager) Mounts() map[string]string {
 // read-only operations (list, prune) that have nothing to do when the VM
 // has never been created.
 func (m *Manager) EnsureRunningIfExists(ctx context.Context) (bool, error) {
+	var running bool
+	err := fsutil.WithLock(lifecycleLockPath(m.name), func() error {
+		var innerErr error
+		running, innerErr = m.ensureRunningIfExistsLocked(ctx)
+		return innerErr
+	})
+	return running, err
+}
+
+func (m *Manager) ensureRunningIfExistsLocked(ctx context.Context) (bool, error) {
 	status := m.getContainerStatus(ctx)
 	switch status {
 	case "running":
@@ -79,6 +91,12 @@ func (m *Manager) EnsureRunningIfExists(ctx context.Context) (bool, error) {
 
 // EnsureRunning ensures the shared VM is running, creating it if needed.
 func (m *Manager) EnsureRunning(ctx context.Context) error {
+	return fsutil.WithLock(lifecycleLockPath(m.name), func() error {
+		return m.ensureRunningLocked(ctx)
+	})
+}
+
+func (m *Manager) ensureRunningLocked(ctx context.Context) error {
 	status := m.getContainerStatus(ctx)
 	switch status {
 	case "running":
@@ -104,7 +122,10 @@ func (m *Manager) EnsureRunning(ctx context.Context) error {
 
 	fmt.Fprintln(os.Stderr, "Creating shared VM...")
 
-	// Clean up any orphaned VM
+	// Clean up any orphaned VM. Safe now that we hold the per-VM lifecycle
+	// lock and have confirmed (fresh status + exec probe above) that no
+	// healthy VM answers to this name — this can no longer race a concurrent
+	// creator into deleting its healthy VM.
 	_ = m.apple.ContainerRemove(ctx, m.name, true)
 
 	args := m.buildCreateArgs()
@@ -142,6 +163,10 @@ func (m *Manager) EnsureRunning(ctx context.Context) error {
 }
 
 func (m *Manager) buildCreateArgs() []string {
+	return m.buildCreateArgsWith(m.mounts)
+}
+
+func (m *Manager) buildCreateArgsWith(mounts map[string]string) []string {
 	var args []string
 	args = append(args, "-d")
 	args = append(args, "--name", m.name)
@@ -154,7 +179,7 @@ func (m *Manager) buildCreateArgs() []string {
 	}
 
 	// Mount workspace directories
-	args = append(args, MountFlags(m.mounts)...)
+	args = append(args, MountFlags(mounts)...)
 
 	// Image
 	image := m.config.Image
@@ -178,12 +203,14 @@ func (m *Manager) Stop(ctx context.Context) error {
 
 // Remove force-removes the shared VM and cleans up state.
 func (m *Manager) Remove(ctx context.Context) error {
-	if err := m.apple.ContainerRemove(ctx, m.name, true); err != nil {
-		fmt.Fprintf(os.Stderr, "Warning: %v\n", err)
-	}
-	_ = DeleteVMState()
-	fmt.Println("Shared VM removed")
-	return nil
+	return fsutil.WithLock(lifecycleLockPath(m.name), func() error {
+		if err := m.apple.ContainerRemove(ctx, m.name, true); err != nil {
+			fmt.Fprintf(os.Stderr, "Warning: %v\n", err)
+		}
+		_ = DeleteVMState()
+		fmt.Println("Shared VM removed")
+		return nil
+	})
 }
 
 // Status returns the current VM status: "running", "stopped", or "".
@@ -260,10 +287,25 @@ func (m *Manager) VMIP(ctx context.Context) string {
 }
 
 // ExpandMounts adds new host paths to the VM's mount set.
-// Since Apple Container only accepts -v at creation time, this requires
-// stopping and recreating the VM. Returns an error if containers are
-// running inside the VM.
+//
+// Apple Container only accepts -v at creation time, so this stops and
+// recreates the VM — which destroys everything inside it (running and stopped
+// containers, images, named volumes, build cache). Because the blast radius is
+// large and easy to trigger accidentally (a single `gocker run -v <new-path>`),
+// recreation is gated on explicit consent when the VM holds any state:
+//   - GOCKER_ASSUME_YES set (non-empty) → proceed without prompting;
+//   - otherwise, if stdin is a TTY → prompt and proceed only on an explicit yes;
+//   - otherwise (non-interactive, no override) → refuse with a clear message.
+//
+// m.mounts is only updated after a successful recreate, so a failed recreate
+// never leaves the in-memory map claiming coverage the VM doesn't have.
 func (m *Manager) ExpandMounts(ctx context.Context, paths []string) error {
+	return fsutil.WithLock(lifecycleLockPath(m.name), func() error {
+		return m.expandMountsLocked(ctx, paths)
+	})
+}
+
+func (m *Manager) expandMountsLocked(ctx context.Context, paths []string) error {
 	// Filter out paths already covered by existing mounts
 	var needed []string
 	for _, p := range paths {
@@ -277,17 +319,24 @@ func (m *Manager) ExpandMounts(ctx context.Context, paths []string) error {
 		return nil
 	}
 
-	// Check for running containers inside the VM
-	n, err := m.listVMContainers(ctx)
-	if err == nil && n > 0 {
-		return fmt.Errorf("cannot expand mounts: %d container(s) running in the shared VM. Stop them first, or add paths to sharedVM.workspaceDirs in ~/.gocker/config.yaml", n)
+	// Recreation destroys everything inside the VM. If it holds any state,
+	// require consent before proceeding.
+	if summary, hasState := m.vmStateSummary(ctx); hasState {
+		if err := confirmDestructiveRecreate(summary); err != nil {
+			return err
+		}
 	}
 
 	fmt.Fprintf(os.Stderr, "Recreating shared VM to add mount(s): %v\n", needed)
 
-	// Add new mounts
+	// Compute the expanded mount set *without* mutating m.mounts yet — if the
+	// recreate fails, the map must still reflect the surviving VM's coverage.
+	newMounts := make(map[string]string, len(m.mounts)+len(needed))
+	for host, vm := range m.mounts {
+		newMounts[host] = vm
+	}
 	for _, p := range needed {
-		m.mounts[p] = "/host" + p
+		newMounts[p] = "/host" + p
 	}
 
 	// Stop and remove existing VM
@@ -295,7 +344,7 @@ func (m *Manager) ExpandMounts(ctx context.Context, paths []string) error {
 	_ = m.apple.ContainerRemove(ctx, m.name, true)
 
 	// Recreate with expanded mounts
-	args := m.buildCreateArgs()
+	args := m.buildCreateArgsWith(newMounts)
 	if err := m.apple.ContainerRun(ctx, args, false); err != nil {
 		_ = m.apple.ContainerRemove(ctx, m.name, true)
 		return fmt.Errorf("recreating shared VM with expanded mounts: %w", err)
@@ -315,6 +364,9 @@ func (m *Manager) ExpandMounts(ctx context.Context, paths []string) error {
 		return fmt.Errorf("shared VM recreated but not responding")
 	}
 
+	// Recreate succeeded — now it is safe to adopt the expanded mount set.
+	m.mounts = newMounts
+
 	// Persist state with new mounts
 	state := &VMState{
 		Name:    m.name,
@@ -329,14 +381,32 @@ func (m *Manager) ExpandMounts(ctx context.Context, paths []string) error {
 	return nil
 }
 
-// listVMContainers counts the containers running *inside* the shared VM via
-// nerdctl, not containers at the Apple-host level (which would include the
-// shared VM itself and any buildkit helpers — not what we care about for
-// "can we safely recreate the VM").
-func (m *Manager) listVMContainers(ctx context.Context) (int, error) {
-	stdout, _, err := m.apple.Exec(ctx, "exec", m.name, "nerdctl", "ps", "-q")
+// vmStateSummary reports whether the shared VM currently holds any state that
+// a recreate would destroy, along with a human-readable summary for the
+// confirmation prompt. It counts running + stopped containers and images
+// *inside* the VM via nerdctl (not Apple-host-level containers, which would
+// include the shared VM itself). A probe failure is treated as "no state" so a
+// dead/absent VM doesn't block expansion.
+func (m *Manager) vmStateSummary(ctx context.Context) (string, bool) {
+	running := m.countVMLines(ctx, "ps", "-q")
+	stopped := m.countVMLines(ctx, "ps", "-a", "-q") - running
+	if stopped < 0 {
+		stopped = 0
+	}
+	images := m.countVMLines(ctx, "images", "-q")
+	if running == 0 && stopped == 0 && images == 0 {
+		return "", false
+	}
+	return fmt.Sprintf("%d running container(s), %d stopped container(s), %d image(s)", running, stopped, images), true
+}
+
+// countVMLines runs `nerdctl <args>` inside the VM and counts non-empty output
+// lines. Returns 0 on any error (VM unreachable, command failed).
+func (m *Manager) countVMLines(ctx context.Context, args ...string) int {
+	execArgs := append([]string{"exec", m.name, "nerdctl"}, args...)
+	stdout, _, err := m.apple.Exec(ctx, execArgs...)
 	if err != nil {
-		return 0, err
+		return 0
 	}
 	n := 0
 	for _, line := range strings.Split(string(stdout), "\n") {
@@ -344,7 +414,28 @@ func (m *Manager) listVMContainers(ctx context.Context) (int, error) {
 			n++
 		}
 	}
-	return n, nil
+	return n
+}
+
+// confirmDestructiveRecreate enforces the consent policy documented on
+// ExpandMounts. summary describes what would be destroyed.
+func confirmDestructiveRecreate(summary string) error {
+	if v := strings.TrimSpace(os.Getenv("GOCKER_ASSUME_YES")); v != "" {
+		return nil
+	}
+	msg := fmt.Sprintf("recreating the shared VM to add a bind mount will destroy everything inside it (%s)", summary)
+	if !stdinIsTTY() {
+		return fmt.Errorf("%s. Refusing without confirmation: re-run in a terminal to confirm, set GOCKER_ASSUME_YES=1, or add the path to sharedVM.workspaceDirs in ~/.gocker/config.yaml", msg)
+	}
+	fmt.Fprintf(os.Stderr, "Warning: %s.\nProceed? [y/N]: ", msg)
+	reader := bufio.NewReader(os.Stdin)
+	line, _ := reader.ReadString('\n')
+	switch strings.ToLower(strings.TrimSpace(line)) {
+	case "y", "yes":
+		return nil
+	default:
+		return fmt.Errorf("aborted: shared VM not recreated")
+	}
 }
 
 // syncMountsFromVM reconciles the manager's in-memory mount map with what

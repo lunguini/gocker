@@ -32,6 +32,15 @@ func lockPath() string {
 	return filepath.Join(stateDir(), ".lock")
 }
 
+// lifecycleLockPath is the per-VM lock serializing VM lifecycle operations
+// (create/start/remove/expand). It is deliberately a *different* file from
+// lockPath: the lifecycle methods call SaveVMState/DeleteVMState, which take
+// the state lock, and flock on the same path from the same process would
+// deadlock (each WithLock opens a fresh file description).
+func lifecycleLockPath(name string) string {
+	return filepath.Join(stateDir(), name+".lifecycle.lock")
+}
+
 func SaveVMState(s *VMState) error {
 	return fsutil.WithLock(lockPath(), func() error {
 		dir := stateDir()

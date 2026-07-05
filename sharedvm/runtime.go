@@ -132,7 +132,7 @@ func (s *SharedVMRuntime) ContainerRun(ctx context.Context, args []string, inter
 	}
 	stdout, stderr, err := s.apple.Exec(ctx, outer...)
 	if err != nil {
-		return fmt.Errorf("%s: %w", strings.TrimSpace(string(stderr)), err)
+		return wrapExecErr(stderr, err)
 	}
 	out := strings.TrimSpace(string(stdout))
 	if out != "" {
@@ -168,7 +168,7 @@ func (s *SharedVMRuntime) ContainerList(ctx context.Context, all bool) ([]engine
 	vmArgs := append([]string{"exec", s.manager.Name(), "nerdctl"}, inner...)
 	stdout, stderr, err := s.apple.Exec(ctx, vmArgs...)
 	if err != nil {
-		return nil, fmt.Errorf("%s: %w", strings.TrimSpace(string(stderr)), err)
+		return nil, wrapExecErr(stderr, err)
 	}
 	// Output is from gocker inside VM which uses nerdctl — parse as nerdctl format
 	containers, err2 := engine.ParseNerdctlContainerList(stdout)
@@ -217,7 +217,7 @@ func (s *SharedVMRuntime) ContainerExec(ctx context.Context, nameOrID string, ar
 	}
 	stdout, stderr, err := s.apple.Exec(ctx, vmArgs...)
 	if err != nil {
-		return fmt.Errorf("%s: %w", strings.TrimSpace(string(stderr)), err)
+		return wrapExecErr(stderr, err)
 	}
 	out := strings.TrimSpace(string(stdout))
 	if out != "" {
@@ -248,7 +248,7 @@ func (s *SharedVMRuntime) ContainerLogs(ctx context.Context, nameOrID string, op
 	}
 	stdout, stderr, err := s.apple.Exec(ctx, vmArgs...)
 	if err != nil {
-		return fmt.Errorf("%s: %w", strings.TrimSpace(string(stderr)), err)
+		return wrapExecErr(stderr, err)
 	}
 	out := string(stdout) + string(stderr)
 	if out != "" {
@@ -264,7 +264,7 @@ func (s *SharedVMRuntime) ContainerInspect(ctx context.Context, nameOrID string)
 	vmArgs := s.proxyArgs(false, "inspect", nameOrID)
 	stdout, stderr, err := s.apple.Exec(ctx, vmArgs...)
 	if err != nil {
-		return nil, fmt.Errorf("%s: %w", strings.TrimSpace(string(stderr)), err)
+		return nil, wrapExecErr(stderr, err)
 	}
 	return stdout, nil
 }
@@ -309,7 +309,7 @@ func (s *SharedVMRuntime) ImageList(ctx context.Context) ([]engine.ImageInfo, er
 	vmArgs := s.proxyArgs(false, "--format", "json", "images")
 	stdout, stderr, err := s.apple.Exec(ctx, vmArgs...)
 	if err != nil {
-		return nil, fmt.Errorf("%s: %w", strings.TrimSpace(string(stderr)), err)
+		return nil, wrapExecErr(stderr, err)
 	}
 	return engine.ParseNerdctlImageList(stdout)
 }
@@ -365,7 +365,7 @@ func (s *SharedVMRuntime) NetworkCreate(ctx context.Context, name string, labels
 	vmArgs := append([]string{"exec", s.manager.Name(), "nerdctl"}, inner...)
 	_, stderr, err := s.apple.Exec(ctx, vmArgs...)
 	if err != nil {
-		return fmt.Errorf("%s: %w", strings.TrimSpace(string(stderr)), err)
+		return wrapExecErr(stderr, err)
 	}
 	return nil
 }
@@ -381,7 +381,7 @@ func (s *SharedVMRuntime) NetworkList(ctx context.Context) ([]engine.NetworkInfo
 	vmArgs := s.proxyArgs(false, "--format", "json", "network", "ls")
 	stdout, stderr, err := s.apple.Exec(ctx, vmArgs...)
 	if err != nil {
-		return nil, fmt.Errorf("%s: %w", strings.TrimSpace(string(stderr)), err)
+		return nil, wrapExecErr(stderr, err)
 	}
 	return engine.ParseNerdctlNetworkList(stdout)
 }
@@ -405,7 +405,7 @@ func (s *SharedVMRuntime) NetworkInspect(ctx context.Context, name string) ([]by
 	vmArgs := s.proxyArgs(false, "network", "inspect", name)
 	stdout, stderr, err := s.apple.Exec(ctx, vmArgs...)
 	if err != nil {
-		return nil, fmt.Errorf("%s: %w", strings.TrimSpace(string(stderr)), err)
+		return nil, wrapExecErr(stderr, err)
 	}
 	return stdout, nil
 }
@@ -427,7 +427,7 @@ func (s *SharedVMRuntime) VolumeList(ctx context.Context) ([]engine.VolumeInfo, 
 	vmArgs := s.proxyArgs(false, "--format", "json", "volume", "ls")
 	stdout, stderr, err := s.apple.Exec(ctx, vmArgs...)
 	if err != nil {
-		return nil, fmt.Errorf("%s: %w", strings.TrimSpace(string(stderr)), err)
+		return nil, wrapExecErr(stderr, err)
 	}
 	return engine.ParseNerdctlVolumeList(stdout)
 }
@@ -443,7 +443,7 @@ func (s *SharedVMRuntime) VolumeInspect(ctx context.Context, name string) ([]byt
 	vmArgs := s.proxyArgs(false, "volume", "inspect", name)
 	stdout, stderr, err := s.apple.Exec(ctx, vmArgs...)
 	if err != nil {
-		return nil, fmt.Errorf("%s: %w", strings.TrimSpace(string(stderr)), err)
+		return nil, wrapExecErr(stderr, err)
 	}
 	return stdout, nil
 }
@@ -486,7 +486,7 @@ func (s *SharedVMRuntime) proxySimple(ctx context.Context, gockerArgs ...string)
 	vmArgs := s.proxyArgs(false, gockerArgs...)
 	_, stderr, err := s.apple.Exec(ctx, vmArgs...)
 	if err != nil {
-		return fmt.Errorf("%s: %w", strings.TrimSpace(string(stderr)), err)
+		return wrapExecErr(stderr, err)
 	}
 	return nil
 }
