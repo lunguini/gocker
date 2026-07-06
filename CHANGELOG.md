@@ -1,5 +1,34 @@
 # Changelog
 
+## v0.7.8
+
+- chore(api): include query string in request log
+- fix(api/logs): flush via http.ResponseController so streamed frames reach clients
+- fix(api): guard nil pipes in streamFramedLogs; update test stub
+- fix(api/logs): split stderr from stdout, frame each separately
+- feat(api/logs): forward tail/since/until/timestamps query params
+- fix(engine): update NetworkCreate call in integration test for new labels arg
+- fix(api): forward Entrypoint, broaden image-ref equivalence; e2e: route asserts through compose_cmd
+- fix(api): forward labels and filter ContainerList — compose v2 ps/exec now route correctly
+- e2e: add docker-api mode — runs scenarios through the Docker Engine API
+- fix: make 'docker compose' work end-to-end through gocker daemon
+- docs: capture shared-VM internals and image-channel story
+- ci: split :dev from :latest; dev builds auto-pull :base-dev
+- fix(engine): capture pull output for non-TTY callers, better error wrapping
+- fix(engine): surface stderr/stdout/command in ContainerRun errors
+- fix(api): derive container State from Status, parse Ports for lazydocker
+- fix(shared): sync mounts from live VM, migrate top-level workspaceDirs, honest info
+- fix(sharedvm): normalize memory, skip VM create for list/prune
+- feat(setup): quit the wizard with Esc+Enter or 'q'/'quit'/'exit'
+- fix(setup): unstick wizard when terminal is left in raw mode
+- docs: draft apple/container issue re ext4 lost+found breaking postgres et al
+- fix(api): auto-inject PGDATA/MYSQL_DATADIR for ext4 volume lost+found
+- refactor(api): decode inspect responses through real Docker SDK types
+- fix(inspect): guarantee State object to prevent lazydocker nil-deref crash
+- fix(logs): downgrade follow=1 to non-follow for stopped containers
+- feat(api): full inspect passthrough, framed logs, /stats endpoint
+- docs: update CHANGELOG.md for v0.7.7
+
 ## v0.7.7
 
 - fix(prune): treat Apple's 'referring containers' errors as soft skips
