@@ -86,6 +86,38 @@ jobs:
       - name: Run integration tests
         run: go test -tags integration -timeout 5m -v ./...
 
+  smoke-linux:
+    name: Smoke (Linux)
+    # End-to-end CLI smoke test on the nerdctl backend. GitHub's macOS
+    # runners lack Virtualization.framework, so Linux is the only hosted
+    # runner where `gocker run` actually works end to end. Compose is
+    # skipped by smoke.sh on Linux (it proxies into an Apple container VM).
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - name: Install containerd + nerdctl + CNI
+        run: |
+          # containerd
+          sudo apt-get update && sudo apt-get install -y containerd
+          sudo systemctl start containerd
+
+          # nerdctl
+          NERDCTL_VERSION=$(curl -s https://api.github.com/repos/containerd/nerdctl/releases/latest | jq -r .tag_name)
+          curl -sSL "https://github.com/containerd/nerdctl/releases/download/${NERDCTL_VERSION}/nerdctl-${NERDCTL_VERSION#v}-linux-amd64.tar.gz" | sudo tar -xzf - -C /usr/local/bin
+
+          # CNI plugins
+          CNI_VERSION=$(curl -s https://api.github.com/repos/containernetworking/plugins/releases/latest | jq -r .tag_name)
+          sudo mkdir -p /opt/cni/bin
+          curl -sSL "https://github.com/containernetworking/plugins/releases/download/${CNI_VERSION}/cni-plugins-linux-amd64-${CNI_VERSION}.tgz" | sudo tar -xzf - -C /opt/cni/bin
+      - name: Build gocker
+        run: make build
+      - name: Run smoke test
+        # nerdctl needs root; sudo passes GOCKER_BIN through as an env assignment.
+        run: sudo GOCKER_BIN="$PWD/gocker" ./test/smoke.sh
+
   integration-linux:
     name: Integration (Linux)
     runs-on: ubuntu-latest

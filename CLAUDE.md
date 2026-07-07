@@ -161,7 +161,8 @@ make smoke    # full end-to-end (requires macOS 26+ with container CLI)
 
 - **Golden file tests** (`engine/testdata/`) — captured Apple CLI JSON output tested against parsers. When Apple changes the format, update testdata and fix failing tests.
 - **Compose unit tests** (`compose/`) — YAML parsing, dependency ordering, volume resolution, env injection.
-- **Smoke test** (`test/smoke.sh`) — exercises every CLI interaction: pull, run, ps, inspect, exec, logs, stop, rm, networks, volumes, compose up/down.
+- **Smoke test** (`test/smoke.sh`) — exercises every CLI interaction: pull, run, ps, inspect, exec, logs, stop, rm, networks, volumes, compose up/down. Runs on Linux too (nerdctl backend; compose auto-skipped) — CI runs it on every PR via the `smoke-linux` job. Env knobs: `GOCKER_SMOKE_IMAGE` (test image override when Docker Hub anonymous pulls are rate-limited; falls back to a locally cached copy and then skips the final rmi), `GOCKER_SMOKE_SKIP_COMPOSE=1`.
+- **Runtime conformance suite** (`api/conformance_test.go`, `-tags integration`) — one shared table of behavioral contracts (create/start split, not-found error contract vs `isNotFoundErr`, inspect JSON shape, volume/network roundtrips, `ExecStreamStdin`) run against each `engine.Runtime` backend so they can't drift apart semantically. Runs in both CI integration jobs. `GOCKER_CONFORMANCE_IMAGE` overrides the test image. Known documented divergences are logged with a `DIVERGENCE:` prefix, not failed.
 - **E2E compose tests** (`test/e2e/`) — real services via `gocker compose`. Run `make e2e` before tagging a release. Each scenario is a self-contained `test/e2e/scenarios/<name>/` directory with `docker-compose.yml` + `assert.sh`. Takes 5-10 minutes and pulls images from Docker Hub.
 
 ## Versioning
