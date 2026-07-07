@@ -15,6 +15,7 @@ func TestCliError_ClassifiesSentinels(t *testing.T) {
 		{`Error: failed to delete one or more containers: ["web"]: not found`, ErrNotFound},
 		{"No such container: web", ErrNotFound},
 		{"image does not exist", ErrNotFound},
+		{`time="2026-07-07T09:07:40Z" level=error msg="no network found matching: web"`, ErrNotFound},
 		{`Error: container with name "web" already exists`, ErrAlreadyExists},
 		{"network gocker-net already exists", ErrAlreadyExists},
 		{"401 Unauthorized. Reason: access denied or wrong credentials", ErrUnauthorized},

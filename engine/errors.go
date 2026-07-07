@@ -36,7 +36,8 @@ func (e *cliErr) Unwrap() []error {
 // nerdctl) to sentinels. Add new phrasings here, not at call sites.
 func classifySentinel(msg string) error {
 	m := strings.ToLower(msg)
-	for _, marker := range []string{"not found", "no such", "does not exist", "unknown image", "unknown container"} {
+	// "no network found matching" is nerdctl's network-inspect phrasing.
+	for _, marker := range []string{"not found", "no such", "does not exist", "unknown image", "unknown container", "no network found"} {
 		if strings.Contains(m, marker) {
 			return ErrNotFound
 		}

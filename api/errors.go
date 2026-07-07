@@ -26,6 +26,9 @@ func isNotFoundErr(err error) bool {
 		"does not exist",
 		"unknown image",
 		"unknown container",
+		// nerdctl's network-inspect phrasing; must match here too for
+		// errors proxied through the shared VM without classification.
+		"no network found",
 	} {
 		if strings.Contains(msg, marker) {
 			return true
