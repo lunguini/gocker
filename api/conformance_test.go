@@ -176,6 +176,20 @@ func isRunning(c engine.ContainerInfo) bool {
 	return strings.Contains(s, "run") || strings.HasPrefix(s, "up")
 }
 
+// probeVirtualization attempts the cheapest operation that requires
+// Virtualization.framework so callers can distinguish "backend broken" from
+// "this runner can't boot VMs" (where some operations silently no-op).
+// Returns nil where virtualization works.
+func probeVirtualization(rt engine.Runtime) error {
+	ctx := context.Background()
+	name := conformanceName("virtprobe")
+	defer func() { _ = rt.ContainerRemove(ctx, name, true) }()
+	if _, err := rt.ContainerCreate(ctx, []string{"--name", name, conformanceImage(), "true"}); err != nil {
+		return err
+	}
+	return rt.ContainerStart(ctx, name)
+}
+
 func testCreateStartSplit(t *testing.T, rt engine.Runtime) {
 	ctx := context.Background()
 	name := conformanceName("split")
@@ -208,6 +222,9 @@ func testCreateStartSplit(t *testing.T, rt engine.Runtime) {
 	}
 
 	if err := rt.ContainerStart(ctx, name); err != nil {
+		// Create succeeds without booting a VM; Start is where hosted CI
+		// runners without Virtualization.framework fail.
+		skipIfNoVirtualizationConformance(t, err)
 		t.Fatalf("ContainerStart failed: %v", err)
 	}
 
@@ -492,6 +509,12 @@ func testVolumeRoundtrip(t *testing.T, rt engine.Runtime) {
 		}
 	}
 	if !found {
+		// On hosted CI runners without Virtualization.framework, Apple's
+		// `container volume create` reports success but nothing persists.
+		// Probe before failing so we distinguish "backend broken" from
+		// "this machine can't run VMs at all". The probe only costs a
+		// container boot on the failure path.
+		skipIfNoVirtualizationConformance(t, probeVirtualization(rt))
 		t.Fatalf("volume %q not found in VolumeList after create", name)
 	}
 
@@ -541,19 +564,21 @@ func testNetworkRoundtrip(t *testing.T, rt engine.Runtime) {
 		t.Fatalf("network %q not found in NetworkList after create", name)
 	}
 
-	// Label survival is backend-dependent. Apple's `container network
-	// create` accepts --label (see engine/network.go labelArgs) but its
-	// `network list`/`network inspect` JSON shape has not been observed to
-	// echo labels back reliably; nerdctl's network ls/inspect does. Only
-	// assert label survival where we've confirmed the backend supports it,
-	// and treat gaps as a DIVERGENCE rather than a failure.
+	// Label survival is backend-dependent, and `network ls` JSON omits
+	// labels on both docker and nerdctl — inspect is the path that must
+	// carry them (it's what compose reads when deciding whether to adopt a
+	// pre-existing network). Assert via inspect where the backend supports
+	// labels; treat gaps as a DIVERGENCE rather than a failure.
 	switch rt.(type) {
 	case *engine.NerdctlRuntime:
-		if found.Labels["com.docker.compose.project"] != "conformance" {
-			t.Errorf("DIVERGENCE: nerdctl NetworkList did not surface labels set at create time: got %v", found.Labels)
+		ndata, ierr := rt.NetworkInspect(ctx, name)
+		if ierr != nil {
+			t.Errorf("NetworkInspect after create failed: %v", ierr)
+		} else if !strings.Contains(string(ndata), "com.docker.compose.project") {
+			t.Errorf("DIVERGENCE: nerdctl NetworkInspect did not surface labels set at create time: %s", ndata)
 		}
 	default:
-		t.Logf("DIVERGENCE (documented, not failed): backend %T's NetworkList label survival is unverified/unsupported; skipping label assertion", rt)
+		t.Logf("DIVERGENCE (documented, not failed): backend %T's label survival is unverified/unsupported; skipping label assertion", rt)
 	}
 
 	if err := rt.NetworkRemove(ctx, name); err != nil {
