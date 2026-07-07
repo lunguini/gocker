@@ -111,6 +111,45 @@ func parseImageListJSON(data []byte) ([]ImageInfo, error) {
 			size = jsonx.GetString(img, "fullSize")
 		}
 
+		// Apple container CLI 1.1.0+ nests the reference under
+		// "configuration" (mirroring container list's nesting):
+		// { "id": ..., "configuration": { "name": "docker.io/library/alpine:latest",
+		//   "creationDate": <Core Data epoch>, "descriptor": {...} },
+		//   "variants": [ { "platform": { "architecture": ... }, "size": <bytes> } ] }
+		if cfg, ok := img["configuration"].(map[string]any); ok {
+			if name == "" {
+				if ref := jsonx.GetString(cfg, "name", "Name"); ref != "" {
+					name, tag = parseReference(ref)
+				}
+			}
+			if desc, ok := cfg["descriptor"].(map[string]any); ok && digest == "" {
+				digest = jsonx.GetString(desc, "digest", "Digest")
+			}
+			// creationDate is a Core Data timestamp (seconds since 2001-01-01),
+			// same encoding as container list's startedDate.
+			if created == "" {
+				if secs, ok := cfg["creationDate"].(float64); ok {
+					coreDataEpoch := time.Date(2001, 1, 1, 0, 0, 0, 0, time.UTC)
+					created = coreDataEpoch.Add(time.Duration(secs * float64(time.Second))).Format(time.RFC3339)
+				}
+			}
+		}
+		arch := jsonx.GetString(img, "arch", "Arch", "architecture", "Architecture")
+		if variants, ok := img["variants"].([]any); ok && len(variants) > 0 {
+			if v, ok := variants[0].(map[string]any); ok {
+				if size == "" {
+					if bytes, ok := v["size"].(float64); ok {
+						size = strconv.FormatInt(int64(bytes), 10)
+					}
+				}
+				if arch == "" {
+					if plat, ok := v["platform"].(map[string]any); ok {
+						arch = jsonx.GetString(plat, "architecture", "arch")
+					}
+				}
+			}
+		}
+
 		if tag == "" {
 			if parts := strings.SplitN(name, ":", 2); len(parts) == 2 {
 				name = parts[0]
@@ -127,7 +166,7 @@ func parseImageListJSON(data []byte) ([]ImageInfo, error) {
 			Digest:    digest,
 			Size:      size,
 			SizeBytes: parseSizeString(size),
-			Arch:      jsonx.GetString(img, "arch", "Arch", "architecture", "Architecture"),
+			Arch:      arch,
 		}
 		if info.ID == "" && digest != "" {
 			info.ID = digest

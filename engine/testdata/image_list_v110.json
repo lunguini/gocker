@@ -1,0 +1,48 @@
+[
+  {
+    "id": "a1b2c3d4e5f6",
+    "configuration": {
+      "creationDate": 773526600.0,
+      "name": "docker.io/library/alpine:latest",
+      "descriptor": {
+        "digest": "sha256:a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2",
+        "mediaType": "application/vnd.oci.image.index.v1+json",
+        "size": 1638
+      }
+    },
+    "variants": [
+      {
+        "platform": {
+          "os": "linux",
+          "architecture": "arm64"
+        },
+        "digest": "sha256:deadbeefcafe1234deadbeefcafe1234deadbeefcafe1234deadbeefcafe1234",
+        "size": 3894235,
+        "creationDate": 773526600.0
+      }
+    ]
+  },
+  {
+    "id": "0f1e2d3c4b5a",
+    "configuration": {
+      "creationDate": 761437800.0,
+      "name": "docker.io/adyjay/gocker:base-latest",
+      "descriptor": {
+        "digest": "sha256:d4e01698adf079cdf6e1b4da1234d4e01698adf079cdf6e1b4da1234d4e01698",
+        "mediaType": "application/vnd.oci.image.index.v1+json",
+        "size": 1201
+      }
+    },
+    "variants": [
+      {
+        "platform": {
+          "os": "linux",
+          "architecture": "arm64"
+        },
+        "digest": "sha256:beadfeed5678beadfeed5678beadfeed5678beadfeed5678beadfeed5678bead",
+        "size": 249100000,
+        "creationDate": 761437800.0
+      }
+    ]
+  }
+]

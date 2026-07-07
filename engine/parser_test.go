@@ -173,6 +173,57 @@ func TestParseImageListJSON(t *testing.T) {
 	})
 }
 
+// TestParseImageListJSON_V110 covers the shape Apple container CLI 1.1.0+
+// emits: reference nested under configuration.name, Core Data creationDate,
+// and per-platform variants carrying byte sizes. Captured from
+// apple/container's ImageResource encoder at tag 1.1.0.
+func TestParseImageListJSON_V110(t *testing.T) {
+	data := requireFile(t, "testdata/image_list_v110.json")
+	images, err := parseImageListJSON(data)
+	if err != nil {
+		t.Fatalf("parseImageListJSON returned error: %v", err)
+	}
+	if len(images) != 2 {
+		t.Fatalf("expected 2 images, got %d", len(images))
+	}
+
+	t.Run("alpine image", func(t *testing.T) {
+		img := images[0]
+		if img.Name != "alpine" {
+			t.Errorf("Name = %q, want %q", img.Name, "alpine")
+		}
+		if img.Tag != "latest" {
+			t.Errorf("Tag = %q, want %q", img.Tag, "latest")
+		}
+		if img.ID != "a1b2c3d4e5f6" {
+			t.Errorf("ID = %q, want %q", img.ID, "a1b2c3d4e5f6")
+		}
+		if img.Digest != "sha256:a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2" {
+			t.Errorf("Digest = %q, want sha256:a1b2...", img.Digest)
+		}
+		if img.SizeBytes != 3894235 {
+			t.Errorf("SizeBytes = %d, want 3894235", img.SizeBytes)
+		}
+		if img.Arch != "arm64" {
+			t.Errorf("Arch = %q, want %q", img.Arch, "arm64")
+		}
+		// 773526600 seconds after the Core Data epoch (2001-01-01) is mid-2025.
+		if img.Created.Year() != 2025 {
+			t.Errorf("Created = %v, want year 2025", img.Created)
+		}
+	})
+
+	t.Run("namespaced image keeps owner", func(t *testing.T) {
+		img := images[1]
+		if img.Name != "adyjay/gocker" {
+			t.Errorf("Name = %q, want %q", img.Name, "adyjay/gocker")
+		}
+		if img.Tag != "base-latest" {
+			t.Errorf("Tag = %q, want %q", img.Tag, "base-latest")
+		}
+	})
+}
+
 func TestParseImageListNDJSON(t *testing.T) {
 	data := requireFile(t, "testdata/image_list_ndjson.jsonl")
 	images, err := parseImageListJSON(data)
