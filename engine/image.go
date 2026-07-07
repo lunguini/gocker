@@ -3,6 +3,8 @@ package engine
 import (
 	"context"
 	"encoding/json"
+	"errors"
+	"fmt"
 	"strconv"
 	"strings"
 	"time"
@@ -229,7 +231,18 @@ func parseReference(ref string) (name, tag string) {
 func (e *Engine) ImageRemove(ctx context.Context, image string) error {
 	_, stderr, err := e.Exec(ctx, "image", "delete", image)
 	if err != nil {
-		return cliError(stderr, err)
+		delErr := cliError(stderr, err)
+		// Apple's `container image delete` reports a generic "failed to
+		// delete one or more images" with no not-found marker, so the text
+		// alone can't be classified. `image inspect` does say "Image not
+		// found" — use it to disambiguate so the API layer can return 404
+		// for missing images (a documented Docker-compat invariant).
+		if !errors.Is(delErr, ErrNotFound) {
+			if _, istderr, ierr := e.Exec(ctx, "image", "inspect", image); ierr != nil && errors.Is(cliError(istderr, ierr), ErrNotFound) {
+				return fmt.Errorf("no such image %q: %w", image, ErrNotFound)
+			}
+		}
+		return delErr
 	}
 	return nil
 }

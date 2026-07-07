@@ -3,6 +3,8 @@ package engine
 import (
 	"context"
 	"encoding/json"
+	"errors"
+	"fmt"
 	"strings"
 	"time"
 
@@ -145,9 +147,31 @@ func (e *Engine) ContainerRemove(ctx context.Context, nameOrID string, force boo
 	}
 	_, stderr, err := e.Exec(ctx, "delete", nameOrID)
 	if err != nil {
-		return cliError(stderr, err)
+		delErr := cliError(stderr, err)
+		// Apple's `container delete` reports the same generic "failed to
+		// delete one or more containers" message whether the container is
+		// missing or genuinely undeletable, so the text alone can't be
+		// classified. Disambiguate by checking existence so the API layer
+		// can map missing-container deletes to 404 instead of 500.
+		if !errors.Is(delErr, ErrNotFound) && !e.containerExists(ctx, nameOrID) {
+			return fmt.Errorf("no such container %q: %w", nameOrID, ErrNotFound)
+		}
+		return delErr
 	}
 	return nil
+}
+
+// containerExists reports whether the CLI knows the container. Apple's
+// `container inspect` exits 0 with an empty JSON array for unknown names.
+// If inspect itself fails we conservatively report true so callers keep
+// the original error instead of masking it with a not-found.
+func (e *Engine) containerExists(ctx context.Context, nameOrID string) bool {
+	out, _, err := e.Exec(ctx, "inspect", nameOrID)
+	if err != nil {
+		return true
+	}
+	trimmed := strings.TrimSpace(string(out))
+	return trimmed != "" && trimmed != "[]" && trimmed != "null"
 }
 
 func (e *Engine) ContainerExec(ctx context.Context, nameOrID string, args []string, interactive bool) error {
