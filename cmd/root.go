@@ -102,7 +102,7 @@ func NewApp(version string) *cli.Command {
 				}
 
 				if override != isolation {
-					var newGeneral, newSandbox engine.Runtime = appleRT, appleRT
+					newGeneral, newSandbox := appleRT, appleRT
 					if override == "hybrid" || override == "shared" {
 						mgr := sharedvm.NewManager(appleRT, cfg.SharedVM)
 						sharedRT := sharedvm.NewSharedVMRuntime(mgr, appleRT)
