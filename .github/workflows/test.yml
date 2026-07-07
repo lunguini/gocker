@@ -99,19 +99,27 @@ jobs:
         with:
           go-version-file: go.mod
       - name: Install containerd + nerdctl + CNI
+        env:
+          # Anonymous api.github.com calls share a rate limit across all
+          # tenants on a runner's IP — unauthenticated lookups intermittently
+          # return an error body that jq turns into "null", and tar then
+          # chokes on the HTML 404 that follows ("not in gzip format").
+          GH_TOKEN: ${{ github.token }}
         run: |
+          set -euo pipefail
+
           # containerd
           sudo apt-get update && sudo apt-get install -y containerd
           sudo systemctl start containerd
 
           # nerdctl
-          NERDCTL_VERSION=$(curl -s https://api.github.com/repos/containerd/nerdctl/releases/latest | jq -r .tag_name)
-          curl -sSL "https://github.com/containerd/nerdctl/releases/download/${NERDCTL_VERSION}/nerdctl-${NERDCTL_VERSION#v}-linux-amd64.tar.gz" | sudo tar -xzf - -C /usr/local/bin
+          NERDCTL_VERSION=$(gh api repos/containerd/nerdctl/releases/latest --jq .tag_name)
+          curl -sSL --fail "https://github.com/containerd/nerdctl/releases/download/${NERDCTL_VERSION}/nerdctl-${NERDCTL_VERSION#v}-linux-amd64.tar.gz" | sudo tar -xzf - -C /usr/local/bin
 
           # CNI plugins
-          CNI_VERSION=$(curl -s https://api.github.com/repos/containernetworking/plugins/releases/latest | jq -r .tag_name)
+          CNI_VERSION=$(gh api repos/containernetworking/plugins/releases/latest --jq .tag_name)
           sudo mkdir -p /opt/cni/bin
-          curl -sSL "https://github.com/containernetworking/plugins/releases/download/${CNI_VERSION}/cni-plugins-linux-amd64-${CNI_VERSION}.tgz" | sudo tar -xzf - -C /opt/cni/bin
+          curl -sSL --fail "https://github.com/containernetworking/plugins/releases/download/${CNI_VERSION}/cni-plugins-linux-amd64-${CNI_VERSION}.tgz" | sudo tar -xzf - -C /opt/cni/bin
       - name: Build gocker
         run: make build
       - name: Run smoke test
@@ -127,19 +135,27 @@ jobs:
         with:
           go-version-file: go.mod
       - name: Install containerd + nerdctl + CNI
+        env:
+          # Anonymous api.github.com calls share a rate limit across all
+          # tenants on a runner's IP — unauthenticated lookups intermittently
+          # return an error body that jq turns into "null", and tar then
+          # chokes on the HTML 404 that follows ("not in gzip format").
+          GH_TOKEN: ${{ github.token }}
         run: |
+          set -euo pipefail
+
           # containerd
           sudo apt-get update && sudo apt-get install -y containerd
           sudo systemctl start containerd
 
           # nerdctl
-          NERDCTL_VERSION=$(curl -s https://api.github.com/repos/containerd/nerdctl/releases/latest | jq -r .tag_name)
-          curl -sSL "https://github.com/containerd/nerdctl/releases/download/${NERDCTL_VERSION}/nerdctl-${NERDCTL_VERSION#v}-linux-amd64.tar.gz" | sudo tar -xzf - -C /usr/local/bin
+          NERDCTL_VERSION=$(gh api repos/containerd/nerdctl/releases/latest --jq .tag_name)
+          curl -sSL --fail "https://github.com/containerd/nerdctl/releases/download/${NERDCTL_VERSION}/nerdctl-${NERDCTL_VERSION#v}-linux-amd64.tar.gz" | sudo tar -xzf - -C /usr/local/bin
 
           # CNI plugins
-          CNI_VERSION=$(curl -s https://api.github.com/repos/containernetworking/plugins/releases/latest | jq -r .tag_name)
+          CNI_VERSION=$(gh api repos/containernetworking/plugins/releases/latest --jq .tag_name)
           sudo mkdir -p /opt/cni/bin
-          curl -sSL "https://github.com/containernetworking/plugins/releases/download/${CNI_VERSION}/cni-plugins-linux-amd64-${CNI_VERSION}.tgz" | sudo tar -xzf - -C /opt/cni/bin
+          curl -sSL --fail "https://github.com/containernetworking/plugins/releases/download/${CNI_VERSION}/cni-plugins-linux-amd64-${CNI_VERSION}.tgz" | sudo tar -xzf - -C /opt/cni/bin
       - name: Pull test images
         run: sudo nerdctl pull alpine:latest
       - name: Run integration tests
