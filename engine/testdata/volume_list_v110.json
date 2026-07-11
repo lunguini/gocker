@@ -1,0 +1,15 @@
+[
+  {
+    "configuration": {
+      "creationDate": "2026-07-11T17:51:10Z",
+      "driver": "local",
+      "format": "ext4",
+      "labels": {},
+      "name": "conf-probe-vol",
+      "options": {},
+      "sizeInBytes": 549755813888,
+      "source": "/Users/adrian/Library/Application Support/com.apple.container/volumes/conf-probe-vol/volume.img"
+    },
+    "id": "conf-probe-vol"
+  }
+]

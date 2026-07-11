@@ -1,47 +1,74 @@
 [
   {
-    "id": "a1b2c3d4e5f6",
     "configuration": {
-      "creationDate": 773526600.0,
-      "name": "docker.io/library/alpine:latest",
+      "creationDate": "2026-04-24T18:39:35Z",
       "descriptor": {
-        "digest": "sha256:a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2",
+        "annotations": {
+          "com.apple.containerization.image.name": "docker.io/adyjay/gocker:base-v0.7.7-14-g2656d4f",
+          "io.containerd.image.name": "docker.io/adyjay/gocker:base-v0.7.7-14-g2656d4f",
+          "org.opencontainers.image.created": "2026-04-24T18:39:43Z",
+          "org.opencontainers.image.ref.name": "base-v0.7.7-14-g2656d4f"
+        },
+        "digest": "sha256:d4e01698adf079cdf6e1b4da9bf9052fbd8c401566982692a9274187ae6c9d66",
         "mediaType": "application/vnd.oci.image.index.v1+json",
-        "size": 1638
-      }
+        "size": 375
+      },
+      "name": "docker.io/adyjay/gocker:base-latest"
     },
+    "id": "d4e01698adf079cdf6e1b4da9bf9052fbd8c401566982692a9274187ae6c9d66",
     "variants": [
       {
-        "platform": {
-          "os": "linux",
-          "architecture": "arm64"
+        "config": {
+          "architecture": "arm64",
+          "config": {
+            "Entrypoint": [
+              "/usr/local/bin/gocker-init.sh"
+            ],
+            "Env": [
+              "PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+            ]
+          },
+          "created": "2026-04-24T18:39:35.254144877Z",
+          "os": "linux"
         },
-        "digest": "sha256:deadbeefcafe1234deadbeefcafe1234deadbeefcafe1234deadbeefcafe1234",
-        "size": 3894235,
-        "creationDate": 773526600.0
+        "digest": "sha256:d80abb6d7eedd42a760b34110770e87dee9b5c1daa714508153f108ec14e5eb2",
+        "platform": {
+          "architecture": "arm64",
+          "os": "linux"
+        },
+        "size": 249131631
       }
     ]
   },
   {
-    "id": "0f1e2d3c4b5a",
     "configuration": {
-      "creationDate": 761437800.0,
-      "name": "docker.io/adyjay/gocker:base-latest",
+      "creationDate": "1970-01-01T00:00:00Z",
       "descriptor": {
-        "digest": "sha256:d4e01698adf079cdf6e1b4da1234d4e01698adf079cdf6e1b4da1234d4e01698",
+        "digest": "sha256:5160897d2af14d8a510beb740df16c2264f6319b3e028f092f50fa6f8f5aa21f",
         "mediaType": "application/vnd.oci.image.index.v1+json",
-        "size": 1201
-      }
+        "size": 306
+      },
+      "name": "ghcr.io/apple/containerization/vminit:0.26.3"
     },
+    "id": "5160897d2af14d8a510beb740df16c2264f6319b3e028f092f50fa6f8f5aa21f",
     "variants": [
       {
-        "platform": {
-          "os": "linux",
-          "architecture": "arm64"
+        "config": {
+          "architecture": "arm64",
+          "config": {
+            "Labels": {
+              "org.opencontainers.image.source": "https://github.com/apple/containerization"
+            }
+          },
+          "os": "linux"
         },
-        "digest": "sha256:beadfeed5678beadfeed5678beadfeed5678beadfeed5678beadfeed5678bead",
-        "size": 249100000,
-        "creationDate": 761437800.0
+        "digest": "sha256:b73759067cf5f73fe9550400af436be20b58c5b38d0d47926534c1c122432d6e",
+        "platform": {
+          "architecture": "arm64",
+          "os": "linux",
+          "variant": "v8"
+        },
+        "size": 60232344
       }
     ]
   }

@@ -174,9 +174,11 @@ func TestParseImageListJSON(t *testing.T) {
 }
 
 // TestParseImageListJSON_V110 covers the shape Apple container CLI 1.1.0+
-// emits: reference nested under configuration.name, Core Data creationDate,
-// and per-platform variants carrying byte sizes. Captured from
-// apple/container's ImageResource encoder at tag 1.1.0.
+// emits: reference nested under configuration.name, RFC3339 creationDate,
+// and per-platform variants carrying byte sizes. testdata is real captured
+// `container image list --format json` output from CLI 1.1.0 (with the
+// bulky variants[].config.history/rootfs arrays pruned — the parser never
+// reads them).
 func TestParseImageListJSON_V110(t *testing.T) {
 	data := requireFile(t, "testdata/image_list_v110.json")
 	images, err := parseImageListJSON(data)
@@ -187,39 +189,44 @@ func TestParseImageListJSON_V110(t *testing.T) {
 		t.Fatalf("expected 2 images, got %d", len(images))
 	}
 
-	t.Run("alpine image", func(t *testing.T) {
+	t.Run("namespaced docker.io image", func(t *testing.T) {
 		img := images[0]
-		if img.Name != "alpine" {
-			t.Errorf("Name = %q, want %q", img.Name, "alpine")
-		}
-		if img.Tag != "latest" {
-			t.Errorf("Tag = %q, want %q", img.Tag, "latest")
-		}
-		if img.ID != "a1b2c3d4e5f6" {
-			t.Errorf("ID = %q, want %q", img.ID, "a1b2c3d4e5f6")
-		}
-		if img.Digest != "sha256:a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2" {
-			t.Errorf("Digest = %q, want sha256:a1b2...", img.Digest)
-		}
-		if img.SizeBytes != 3894235 {
-			t.Errorf("SizeBytes = %d, want 3894235", img.SizeBytes)
-		}
-		if img.Arch != "arm64" {
-			t.Errorf("Arch = %q, want %q", img.Arch, "arm64")
-		}
-		// 773526600 seconds after the Core Data epoch (2001-01-01) is mid-2025.
-		if img.Created.Year() != 2025 {
-			t.Errorf("Created = %v, want year 2025", img.Created)
-		}
-	})
-
-	t.Run("namespaced image keeps owner", func(t *testing.T) {
-		img := images[1]
 		if img.Name != "adyjay/gocker" {
 			t.Errorf("Name = %q, want %q", img.Name, "adyjay/gocker")
 		}
 		if img.Tag != "base-latest" {
 			t.Errorf("Tag = %q, want %q", img.Tag, "base-latest")
+		}
+		if img.ID != "d4e01698adf079cdf6e1b4da9bf9052fbd8c401566982692a9274187ae6c9d66" {
+			t.Errorf("ID = %q, want full index digest hex", img.ID)
+		}
+		if img.Digest != "sha256:d4e01698adf079cdf6e1b4da9bf9052fbd8c401566982692a9274187ae6c9d66" {
+			t.Errorf("Digest = %q, want sha256:d4e0...", img.Digest)
+		}
+		if img.SizeBytes != 249131631 {
+			t.Errorf("SizeBytes = %d, want 249131631", img.SizeBytes)
+		}
+		if img.Size != "249.1MB" {
+			t.Errorf("Size = %q, want %q", img.Size, "249.1MB")
+		}
+		if img.Arch != "arm64" {
+			t.Errorf("Arch = %q, want %q", img.Arch, "arm64")
+		}
+		if img.Created.Year() != 2026 || img.Created.Month() != 4 {
+			t.Errorf("Created = %v, want 2026-04", img.Created)
+		}
+	})
+
+	t.Run("non-docker.io registry keeps host", func(t *testing.T) {
+		img := images[1]
+		if img.Name != "ghcr.io/apple/containerization/vminit" {
+			t.Errorf("Name = %q, want %q", img.Name, "ghcr.io/apple/containerization/vminit")
+		}
+		if img.Tag != "0.26.3" {
+			t.Errorf("Tag = %q, want %q", img.Tag, "0.26.3")
+		}
+		if img.SizeBytes != 60232344 {
+			t.Errorf("SizeBytes = %d, want 60232344", img.SizeBytes)
 		}
 	})
 }
@@ -344,6 +351,33 @@ func TestParseNetworkListJSON(t *testing.T) {
 			t.Errorf("ID: got %q, want the raw id", nets[0].ID)
 		}
 	})
+}
+
+// TestParseVolumeListJSON_V110 covers Apple container CLI 1.1.0+, which
+// nests volume fields under "configuration" like container/image list.
+// testdata is real captured `container volume list --format json` output.
+func TestParseVolumeListJSON_V110(t *testing.T) {
+	data := requireFile(t, "testdata/volume_list_v110.json")
+	volumes, err := parseVolumeListJSON(data)
+	if err != nil {
+		t.Fatalf("parseVolumeListJSON returned error: %v", err)
+	}
+	if len(volumes) != 1 {
+		t.Fatalf("expected 1 volume, got %d", len(volumes))
+	}
+	v := volumes[0]
+	if v.Name != "conf-probe-vol" {
+		t.Errorf("Name = %q, want %q", v.Name, "conf-probe-vol")
+	}
+	if v.Driver != "local" {
+		t.Errorf("Driver = %q, want %q", v.Driver, "local")
+	}
+	if want := "/Users/adrian/Library/Application Support/com.apple.container/volumes/conf-probe-vol/volume.img"; v.Mountpoint != want {
+		t.Errorf("Mountpoint = %q, want %q", v.Mountpoint, want)
+	}
+	if v.Created.Year() != 2026 || v.Created.Month() != 7 {
+		t.Errorf("Created = %v, want 2026-07", v.Created)
+	}
 }
 
 func TestParseVolumeListJSON(t *testing.T) {

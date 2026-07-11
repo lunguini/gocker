@@ -193,7 +193,7 @@ When debugging "container already exists" errors, check both `gocker sandbox ls`
 ## Apple `container` CLI Quirks
 
 - **No `attach` command.** Use `container exec <name> /bin/bash` instead. Gocker's `sandbox attach` wraps this.
-- **Nested JSON output.** `container list --format json` returns deeply nested structures — fields like `id` and `image` are under `configuration`, not top-level. See `containerInfoFromNested()` in `engine/container.go`.
+- **Nested JSON output.** `container list --format json` returns deeply nested structures — fields like `id` and `image` are under `configuration`, not top-level. See `containerInfoFromNested()` in `engine/container.go`. As of CLI 1.1.0, `image list` and `volume list` adopted the same `configuration` nesting (RFC3339 `creationDate`, per-platform `variants` with byte sizes for images) — golden fixtures `image_list_v110.json` / `volume_list_v110.json` capture real output. When a new CLI release lands, run the conformance suite locally before trusting it.
 - **Core Data timestamps.** `startedDate` uses Apple's Core Data epoch (seconds since 2001-01-01), not Unix epoch.
 - **No `--user` flag.** Cannot switch users at runtime; the user must be set in the Dockerfile.
 - **Config mounts target `/home/sandbox/`** not `/root/` — the claude template image runs as the `sandbox` user.

@@ -125,8 +125,12 @@ func parseImageListJSON(data []byte) ([]ImageInfo, error) {
 			if desc, ok := cfg["descriptor"].(map[string]any); ok && digest == "" {
 				digest = jsonx.GetString(desc, "digest", "Digest")
 			}
-			// creationDate is a Core Data timestamp (seconds since 2001-01-01),
-			// same encoding as container list's startedDate.
+			// creationDate is RFC3339 in observed 1.1.0 output; keep a Core
+			// Data float fallback since that's how container list encodes
+			// startedDate and Apple has switched encoders before.
+			if created == "" {
+				created = jsonx.GetString(cfg, "creationDate", "CreationDate")
+			}
 			if created == "" {
 				if secs, ok := cfg["creationDate"].(float64); ok {
 					coreDataEpoch := time.Date(2001, 1, 1, 0, 0, 0, 0, time.UTC)
@@ -135,11 +139,13 @@ func parseImageListJSON(data []byte) ([]ImageInfo, error) {
 			}
 		}
 		arch := jsonx.GetString(img, "arch", "Arch", "architecture", "Architecture")
+		var sizeBytes int64
 		if variants, ok := img["variants"].([]any); ok && len(variants) > 0 {
 			if v, ok := variants[0].(map[string]any); ok {
 				if size == "" {
 					if bytes, ok := v["size"].(float64); ok {
-						size = strconv.FormatInt(int64(bytes), 10)
+						sizeBytes = int64(bytes)
+						size = humanSizeBytes(sizeBytes)
 					}
 				}
 				if arch == "" {
@@ -165,8 +171,11 @@ func parseImageListJSON(data []byte) ([]ImageInfo, error) {
 			Tag:       tag,
 			Digest:    digest,
 			Size:      size,
-			SizeBytes: parseSizeString(size),
+			SizeBytes: sizeBytes,
 			Arch:      arch,
+		}
+		if info.SizeBytes == 0 {
+			info.SizeBytes = parseSizeString(size)
 		}
 		if info.ID == "" && digest != "" {
 			info.ID = digest
@@ -188,6 +197,21 @@ func parseImageListJSON(data []byte) ([]ImageInfo, error) {
 // decimal separator, no space before the unit. Both shapes are handled here;
 // unparseable input returns 0 (callers already keep the raw string in
 // ImageInfo.Size for display).
+// humanSizeBytes renders a byte count in docker-style decimal units
+// ("249.1MB"), matching what parseSizeString can read back.
+func humanSizeBytes(b int64) string {
+	const unit = 1000
+	if b < unit {
+		return strconv.FormatInt(b, 10) + "B"
+	}
+	div, exp := int64(unit), 0
+	for n := b / unit; n >= unit; n /= unit {
+		div *= unit
+		exp++
+	}
+	return fmt.Sprintf("%.1f%cB", float64(b)/float64(div), "kMGT"[exp])
+}
+
 func parseSizeString(s string) int64 {
 	s = strings.TrimSpace(s)
 	if s == "" {

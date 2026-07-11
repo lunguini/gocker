@@ -49,13 +49,29 @@ func parseVolumeListJSON(data []byte) ([]VolumeInfo, error) {
 
 	var result []VolumeInfo
 	for _, v := range volumes {
+		// Apple container CLI 1.1.0+ nests volume fields under
+		// "configuration" (same nesting change as container/image list):
+		// { "id": "vol", "configuration": { "name": "vol", "driver": "local",
+		//   "creationDate": "...", "labels": {...}, "source": "/path/volume.img" } }
+		if cfg, ok := v["configuration"].(map[string]any); ok {
+			for _, key := range []string{"name", "driver", "labels", "source", "creationDate"} {
+				if _, exists := v[key]; !exists {
+					if val, ok := cfg[key]; ok {
+						v[key] = val
+					}
+				}
+			}
+		}
 		info := VolumeInfo{
 			Name:       jsonx.GetString(v, "name", "Name"),
 			Driver:     jsonx.GetString(v, "driver", "Driver"),
-			Mountpoint: jsonx.GetString(v, "mountpoint", "Mountpoint"),
+			Mountpoint: jsonx.GetString(v, "mountpoint", "Mountpoint", "source"),
 			Labels:     jsonx.ExtractLabelsFromAny(v),
 		}
-		if created := jsonx.GetString(v, "created", "Created", "createdAt", "CreatedAt"); created != "" {
+		if info.Name == "" {
+			info.Name = jsonx.GetString(v, "id", "ID", "Id")
+		}
+		if created := jsonx.GetString(v, "created", "Created", "createdAt", "CreatedAt", "creationDate"); created != "" {
 			if t, err := time.Parse(time.RFC3339, created); err == nil {
 				info.Created = t
 			}
