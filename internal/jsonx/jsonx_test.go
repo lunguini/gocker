@@ -150,6 +150,7 @@ func TestInspectStatus(t *testing.T) {
 		{"nested State.Status", `{"State":{"Status":"exited"}}`, "exited"},
 		{"nested lowercase state.status", `{"state":{"status":"exited"}}`, "exited"},
 		{"flat capitalized Status", `{"Status":"stopped"}`, "stopped"},
+		{"CLI 1.1.0 status object with state", `[{"id":"vm","status":{"state":"running","startedDate":"2026-07-12T02:18:00Z","networks":[]}}]`, "running"},
 		{"malformed JSON falls back to string scan", `not json but has "status":"scanned" in it`, "scanned"},
 		{"malformed JSON with capitalized Status scan", `garbage "Status":"scanned2" trailer`, "scanned2"},
 		{"nothing found returns empty", `{"configuration":{"id":"x"}}`, ""},

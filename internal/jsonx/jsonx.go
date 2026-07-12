@@ -146,6 +146,14 @@ func InspectStatus(raw []byte) string {
 				}
 			}
 		}
+		// Apple container CLI 1.1.0+: "status" is an object holding runtime
+		// state — { "status": { "state": "running", "startedDate": "...",
+		// "networks": [...] } }. Pre-1.1.0 it was a plain string.
+		if status, ok := obj["status"].(map[string]any); ok {
+			if s := GetString(status, "state", "State"); s != "" {
+				return s
+			}
+		}
 		if s := GetString(obj, "status", "Status"); s != "" {
 			return s
 		}

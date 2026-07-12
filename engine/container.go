@@ -88,10 +88,21 @@ func containerInfoFromNested(c map[string]any) ContainerInfo {
 	}
 
 	info := ContainerInfo{
-		ID:     jsonx.GetString(config, "id"),
-		Name:   jsonx.GetString(config, "id"),
-		Status: jsonx.GetString(c, "status"),
-		State:  jsonx.GetString(c, "status"),
+		ID:   jsonx.GetString(config, "id"),
+		Name: jsonx.GetString(config, "id"),
+	}
+
+	// Apple container CLI 1.1.0+ replaced the top-level status string with
+	// an object: { "status": { "state": "running", "startedDate": "<RFC3339>",
+	// "networks": [...] } }. Pre-1.1.0 kept status as a string and networks/
+	// startedDate at the top level — support both.
+	statusObj, _ := c["status"].(map[string]any)
+	if statusObj != nil {
+		info.Status = jsonx.GetString(statusObj, "state")
+		info.State = info.Status
+	} else {
+		info.Status = jsonx.GetString(c, "status")
+		info.State = info.Status
 	}
 
 	// Image reference: configuration.image.reference
@@ -104,8 +115,12 @@ func containerInfoFromNested(c map[string]any) ContainerInfo {
 		info.Command = jsonx.GetString(initProc, "executable")
 	}
 
-	// IP: first network's ipv4Address
-	if networks, ok := c["networks"].([]any); ok && len(networks) > 0 {
+	// IP: first network's ipv4Address. 1.1.0+ nests networks under status.
+	networks, ok := c["networks"].([]any)
+	if !ok && statusObj != nil {
+		networks, _ = statusObj["networks"].([]any)
+	}
+	if len(networks) > 0 {
 		if net, ok := networks[0].(map[string]any); ok {
 			ip := jsonx.GetString(net, "ipv4Address")
 			// Strip CIDR suffix (e.g., "192.168.64.3/24" -> "192.168.64.3")
@@ -116,10 +131,17 @@ func containerInfoFromNested(c map[string]any) ContainerInfo {
 		}
 	}
 
-	// Started date: startedDate is a Core Data timestamp (seconds since 2001-01-01)
+	// Started date: a Core Data timestamp (seconds since 2001-01-01) at the
+	// top level pre-1.1.0; an RFC3339 string under status from 1.1.0 on.
 	if started, ok := c["startedDate"].(float64); ok {
 		coreDataEpoch := time.Date(2001, 1, 1, 0, 0, 0, 0, time.UTC)
 		info.Created = coreDataEpoch.Add(time.Duration(started * float64(time.Second)))
+	} else if statusObj != nil {
+		if started := jsonx.GetString(statusObj, "startedDate"); started != "" {
+			if t, err := time.Parse(time.RFC3339, started); err == nil {
+				info.Created = t
+			}
+		}
 	}
 
 	return info

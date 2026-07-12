@@ -1,0 +1,79 @@
+[
+  {
+    "configuration": {
+      "capAdd": [
+        "ALL"
+      ],
+      "capDrop": [],
+      "creationDate": "2026-07-12T02:17:59Z",
+      "id": "gocker-shared",
+      "image": {
+        "descriptor": {
+          "digest": "sha256:0c6a0854ce67b4b14ebb4cd262b0ee9413ffe13a792071fe47ee6d027c9bbfad",
+          "mediaType": "application/vnd.oci.image.index.v1+json",
+          "size": 856
+        },
+        "reference": "docker.io/adyjay/gocker:base-dev"
+      },
+      "initProcess": {
+        "arguments": [],
+        "environment": [
+          "PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+        ],
+        "executable": "/usr/local/bin/gocker-init.sh",
+        "rlimits": [],
+        "supplementalGroups": [],
+        "terminal": false,
+        "user": {
+          "id": {
+            "gid": 0,
+            "uid": 0
+          }
+        },
+        "workingDirectory": "/"
+      },
+      "networks": [
+        {
+          "network": "default",
+          "options": {
+            "hostname": "gocker-shared",
+            "mtu": 1280
+          }
+        }
+      ],
+      "platform": {
+        "architecture": "arm64",
+        "os": "linux"
+      },
+      "publishedPorts": [],
+      "publishedSockets": [],
+      "readOnly": false,
+      "resources": {
+        "cpuOverhead": 1,
+        "cpus": 4,
+        "memoryInBytes": 6442450944
+      },
+      "runtimeHandler": "container-runtime-linux",
+      "ssh": false,
+      "useInit": false,
+      "virtualization": false
+    },
+    "id": "gocker-shared",
+    "status": {
+      "networks": [
+        {
+          "hostname": "gocker-shared",
+          "ipv4Address": "192.168.78.29/24",
+          "ipv4Gateway": "192.168.78.1",
+          "ipv6Address": "fdfa:302d:545b:f737:fc63:a0ff:fe31:d4f1/64",
+          "macAddress": "fe:63:a0:31:d4:f1",
+          "mtu": 1280,
+          "network": "default",
+          "variant": "reserved"
+        }
+      ],
+      "startedDate": "2026-07-12T02:18:00Z",
+      "state": "running"
+    }
+  }
+]

@@ -75,6 +75,44 @@ func TestParseContainerListJSON(t *testing.T) {
 	})
 }
 
+// TestParseContainerListJSON_V110 covers Apple container CLI 1.1.0+, which
+// replaced the top-level status string with an object carrying state,
+// RFC3339 startedDate, and the networks array. testdata is real captured
+// `container list --format json` output (bulky configuration sub-objects
+// the parser never reads were pruned).
+func TestParseContainerListJSON_V110(t *testing.T) {
+	data := requireFile(t, "testdata/container_list_v110.json")
+	containers, err := parseContainerListJSON(data)
+	if err != nil {
+		t.Fatalf("parseContainerListJSON returned error: %v", err)
+	}
+	if len(containers) != 1 {
+		t.Fatalf("expected 1 container, got %d", len(containers))
+	}
+	c := containers[0]
+	if c.ID != "gocker-shared" {
+		t.Errorf("ID = %q, want %q", c.ID, "gocker-shared")
+	}
+	if c.State != "running" {
+		t.Errorf("State = %q, want %q", c.State, "running")
+	}
+	if c.Status != "running" {
+		t.Errorf("Status = %q, want %q", c.Status, "running")
+	}
+	if c.Image != "docker.io/adyjay/gocker:base-dev" {
+		t.Errorf("Image = %q, want base-dev reference", c.Image)
+	}
+	if c.Command != "/usr/local/bin/gocker-init.sh" {
+		t.Errorf("Command = %q, want gocker-init.sh", c.Command)
+	}
+	if c.IP != "192.168.78.29" {
+		t.Errorf("IP = %q, want %q (CIDR suffix stripped)", c.IP, "192.168.78.29")
+	}
+	if c.Created.Year() != 2026 || c.Created.Month() != 7 {
+		t.Errorf("Created = %v, want 2026-07", c.Created)
+	}
+}
+
 func TestParseContainerListNDJSON(t *testing.T) {
 	data := requireFile(t, "testdata/container_list_ndjson.jsonl")
 	containers, err := parseContainerListJSON(data)

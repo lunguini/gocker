@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/lunguini/gocker/config"
@@ -25,6 +26,9 @@ type Manager struct {
 	config config.SharedVM
 	mounts map[string]string
 	name   string // VM container name
+
+	capOnce sync.Once
+	capArgs []string
 }
 
 func NewManager(apple engine.Runtime, cfg config.SharedVM) *Manager {
@@ -169,10 +173,29 @@ func (m *Manager) buildCreateArgs() []string {
 	return m.buildCreateArgsWith(m.mounts)
 }
 
+// capAddArgs returns ["--cap-add", "ALL"] when the container CLI supports
+// the flag. CLI 1.1.0 both introduced --cap-add and began confining
+// container processes to Docker's default capability set (no
+// CAP_SYS_ADMIN); the VM runs nested containerd, which needs full
+// capabilities to create overlayfs/bind mounts. Pre-1.1.0 CLIs granted
+// full capabilities implicitly and reject the unknown flag, so probe
+// `run --help` once per Manager. The VM itself remains the hardware
+// isolation boundary — full caps inside it match pre-1.1.0 behavior.
+func (m *Manager) capAddArgs() []string {
+	m.capOnce.Do(func() {
+		stdout, _, err := m.apple.Exec(context.Background(), "run", "--help")
+		if err == nil && strings.Contains(string(stdout), "--cap-add") {
+			m.capArgs = []string{"--cap-add", "ALL"}
+		}
+	})
+	return m.capArgs
+}
+
 func (m *Manager) buildCreateArgsWith(mounts map[string]string) []string {
 	var args []string
 	args = append(args, "-d")
 	args = append(args, "--name", m.name)
+	args = append(args, m.capAddArgs()...)
 
 	memory := normalizeMemory(m.config.Memory)
 	args = append(args, "-m", memory)
