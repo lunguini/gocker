@@ -87,7 +87,17 @@ func (s *SharedVMRuntime) ExecStreamStdin(ctx context.Context, stdin io.Reader, 
 	}
 	// -i only, never -t (see doc comment). Build the outer args explicitly
 	// rather than via proxyArgs so the TTY probe can't add -t here.
-	vmArgs := append([]string{"exec", "-i", s.manager.Name(), "gocker"}, args...)
+	//
+	// For exec, bypass the inner gocker and drive nerdctl directly (same
+	// approach as ContainerList): exec args arrive in docker/nerdctl
+	// syntax already, and inner gocker's exec forces -t for -i sessions,
+	// which nerdctl rejects with "provided file is not a console" — stdin
+	// on this proxied path is always a pipe, never a console.
+	inner := "gocker"
+	if len(args) > 0 && args[0] == "exec" {
+		inner = "nerdctl"
+	}
+	vmArgs := append([]string{"exec", "-i", s.manager.Name(), inner}, args...)
 	return s.apple.ExecStreamStdin(ctx, stdin, vmArgs...)
 }
 

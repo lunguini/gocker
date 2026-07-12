@@ -252,8 +252,15 @@ func (n *NerdctlRuntime) ContainerExec(ctx context.Context, nameOrID string, arg
 	cmdArgs := append([]string{"exec"}, nameOrID)
 	cmdArgs = append(cmdArgs, args...)
 	if interactive {
-		// Prepend -it flags after "exec"
-		cmdArgs = []string{"exec", "-it", nameOrID}
+		// -i always; -t only when stdin is a real terminal — nerdctl exec
+		// rejects -t with "provided file is not a console" when stdin is a
+		// pipe (e.g. `gocker exec -i c cat < file`, or any exec proxied
+		// into the shared VM).
+		cmdArgs = []string{"exec", "-i"}
+		if termx.StdinIsTTY() {
+			cmdArgs = append(cmdArgs, "-t")
+		}
+		cmdArgs = append(cmdArgs, nameOrID)
 		cmdArgs = append(cmdArgs, args...)
 		return n.ExecInteractive(ctx, cmdArgs...)
 	}

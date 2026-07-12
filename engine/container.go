@@ -152,6 +152,13 @@ func (e *Engine) ContainerStop(ctx context.Context, nameOrID string) error {
 	if err != nil {
 		return cliError(stderr, err)
 	}
+	// Apple's `container stop` exits 0 for unknown names, leaving nothing
+	// to classify — Docker returns 404 ("No such container"). Verify the
+	// name actually refers to a container so callers (and the API layer)
+	// see the not-found instead of a silent success.
+	if !e.containerExists(ctx, nameOrID) {
+		return fmt.Errorf("no such container %q: %w", nameOrID, ErrNotFound)
+	}
 	return nil
 }
 

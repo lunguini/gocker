@@ -22,7 +22,10 @@ import (
 	"testing"
 	"time"
 
+	"github.com/lunguini/gocker/config"
 	"github.com/lunguini/gocker/engine"
+	"github.com/lunguini/gocker/internal/jsonx"
+	"github.com/lunguini/gocker/sharedvm"
 )
 
 // conformanceImage is the image exercised by the suite. Overridable via
@@ -101,18 +104,29 @@ func TestConformance_Nerdctl(t *testing.T) {
 	runConformance(t, rt)
 }
 
-// TestConformance_SharedVM would exercise sharedvm.SharedVMRuntime, but doing
-// so from package api would require importing the sharedvm package (which
-// imports engine) plus a live shared VM. That's a reasonable no-cycle import
-// on paper, but wiring a real Manager here means duplicating VM lifecycle
-// setup/gating (GOCKER_DESTRUCTIVE_TESTS, EnsureRunning, Remove-on-cleanup)
-// that already exists in sharedvm/sharedvm_integration_test.go, and this
-// suite has no safe way to guarantee it isn't churning a developer's in-use
-// VM. Left as a follow-up: the cleanest fix is likely to move runConformance
-// itself into an internal helper package importable by both api and
-// sharedvm's integration tests, so sharedvm can call it against its own
-// gated Manager-backed runtime without api needing to depend on sharedvm.
-// TODO(follow-up): wire SharedVMRuntime into this suite via that shared helper.
+// TestConformance_SharedVM exercises the third Runtime implementation — the
+// proxy into the shared VM used by shared/hybrid isolation. It never
+// creates, starts, or removes a VM: it runs only when the shared VM already
+// exists AND is running (EnsureRunningIfExists would boot a stopped VM, so
+// we gate on live status directly). Test containers/volumes/networks are
+// uniquely named and cleaned up inside the VM; the VM itself is untouched.
+// Effectively a dev-machine test: hosted CI runners can't run VMs at all.
+func TestConformance_SharedVM(t *testing.T) {
+	if runtime.GOOS != "darwin" {
+		t.Skip("shared VM only exists on darwin (Apple Container CLI)")
+	}
+	eng := engine.New("")
+	if err := eng.Validate(); err != nil {
+		t.Skipf("container CLI not available: %v", err)
+	}
+	cfg := config.Load()
+	mgr := sharedvm.NewManager(eng, cfg.SharedVM)
+	data, err := eng.ContainerInspect(context.Background(), mgr.Name())
+	if err != nil || strings.ToLower(jsonx.InspectStatus(data)) != "running" {
+		t.Skipf("shared VM %q not running; start it (any shared-mode gocker command) to include this backend", mgr.Name())
+	}
+	runConformance(t, sharedvm.NewSharedVMRuntime(mgr, eng))
+}
 
 // runConformance is the shared table of behavioral assertions run against
 // every engine.Runtime backend. Every subtest cleans up after itself via
@@ -306,16 +320,12 @@ func testNotFoundContract(t *testing.T, rt engine.Runtime) {
 		}
 	}
 
-	// DIVERGENCE: Apple's `container stop` exits 0 for unknown names, so the
-	// Engine backend cannot signal not-found and the API returns success
-	// where Docker returns 404. nerdctl errors properly. Fixing this would
-	// require an existence pre-check on every stop — documented follow-up.
+	// Apple's `container stop` exits 0 for unknown names, so the Engine
+	// backend verifies existence after a successful stop and synthesizes
+	// ErrNotFound; nerdctl errors natively. Either way the contract is a
+	// 404-classifiable error.
 	if err := rt.ContainerStop(ctx, missing); err == nil {
-		if _, isApple := rt.(*engine.Engine); isApple {
-			t.Logf("DIVERGENCE (documented, not failed): Engine ContainerStop on missing container returns nil; API serves 2xx instead of 404")
-		} else {
-			t.Errorf("ContainerStop against nonexistent %q returned nil error, expected an error", missing)
-		}
+		t.Errorf("ContainerStop against nonexistent %q returned nil error, expected an error", missing)
 	} else if !isNotFoundErr(err) {
 		t.Errorf("ContainerStop against nonexistent %q returned error not recognized by isNotFoundErr: %v", missing, err)
 	}
