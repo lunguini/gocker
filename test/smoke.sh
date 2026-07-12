@@ -82,7 +82,7 @@ cleanup() {
 
     # Compose down if dir exists
     if [[ -n "$COMPOSE_DIR" && -d "$COMPOSE_DIR" ]]; then
-        "$GOCKER" compose down -f "$COMPOSE_DIR/docker-compose.yml" 2>/dev/null || true
+        "$GOCKER" compose -f "$COMPOSE_DIR/docker-compose.yml" down 2>/dev/null || true
         rm -rf "$COMPOSE_DIR"
     fi
 
@@ -277,7 +277,10 @@ elif [[ "${GOCKER_SMOKE_SKIP_COMPOSE:-0}" == "1" ]]; then
     printf "${YELLOW}  ~ skipped (GOCKER_SMOKE_SKIP_COMPOSE=1)${NC}\n"
 else
 
-COMPOSE_DIR=$(mktemp -d)
+# The compose file must live under a VM-mounted workspace dir (/tmp is
+# mounted by default) — macOS mktemp's default /var/folders/... is not
+# visible inside the compose VM, so path translation would fail.
+COMPOSE_DIR=$(mktemp -d /tmp/gocker-smoke-compose-XXXXXX)
 COMPOSE_SVC="${PREFIX}-svc"
 
 cat > "$COMPOSE_DIR/docker-compose.yml" <<EOF
@@ -287,16 +290,19 @@ services:
     command: sleep 300
 EOF
 
-run_test "compose up -d" "$GOCKER" compose up -f "$COMPOSE_DIR/docker-compose.yml" -d
+# -f must precede the subcommand — compose args are proxied verbatim to
+# nerdctl compose, which (like docker compose) rejects -f after it. For
+# `logs`, trailing -f would even mean --follow.
+run_test "compose up -d" "$GOCKER" compose -f "$COMPOSE_DIR/docker-compose.yml" up -d
 
-COMPOSE_PS=$("$GOCKER" compose ps -f "$COMPOSE_DIR/docker-compose.yml" 2>/dev/null || true)
+COMPOSE_PS=$("$GOCKER" compose -f "$COMPOSE_DIR/docker-compose.yml" ps 2>/dev/null || true)
 assert_contains "compose ps shows service" "$COMPOSE_PS" "$COMPOSE_SVC"
 
-run_test "compose logs" "$GOCKER" compose logs -f "$COMPOSE_DIR/docker-compose.yml"
+run_test "compose logs" "$GOCKER" compose -f "$COMPOSE_DIR/docker-compose.yml" logs
 
-run_test "compose down" "$GOCKER" compose down -f "$COMPOSE_DIR/docker-compose.yml"
+run_test "compose down" "$GOCKER" compose -f "$COMPOSE_DIR/docker-compose.yml" down
 
-COMPOSE_PS_AFTER=$("$GOCKER" compose ps -f "$COMPOSE_DIR/docker-compose.yml" 2>/dev/null || true)
+COMPOSE_PS_AFTER=$("$GOCKER" compose -f "$COMPOSE_DIR/docker-compose.yml" ps 2>/dev/null || true)
 if echo "$COMPOSE_PS_AFTER" | grep -q "$COMPOSE_SVC"; then
     fail "compose service cleaned up after down"
 else
