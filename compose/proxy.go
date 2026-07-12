@@ -23,11 +23,80 @@ func NewProxy(apple engine.Runtime, mgr *sharedvm.Manager) *Proxy {
 	return &Proxy{apple: apple, manager: mgr}
 }
 
+// composeValueFlags are the compose *global* flags (before the subcommand)
+// that consume a following value. Used to skip past a flag's value when
+// locating the subcommand token.
+var composeValueFlags = map[string]bool{
+	"-f": true, "--file": true,
+	"-p": true, "--project-name": true,
+	"--project-directory": true,
+	"--profile":           true,
+	"--env-file":          true,
+	"--ansi":              true,
+	"--progress":          true,
+	"--parallel":          true,
+}
+
+// SubcommandIndex returns the index of the compose subcommand token
+// (up, down, exec, ...) in args, or -1 if none is present. It skips global
+// flags and their values so an argument that happens to equal a subcommand
+// name (e.g. a service named "down") is not mistaken for the subcommand.
+func SubcommandIndex(args []string) int {
+	for i := 0; i < len(args); i++ {
+		a := args[i]
+		if strings.HasPrefix(a, "-") {
+			// `--flag=value` carries its own value; a bare value flag consumes
+			// the next token.
+			if !strings.Contains(a, "=") && composeValueFlags[a] {
+				i++
+			}
+			continue
+		}
+		return i
+	}
+	return -1
+}
+
+// readOnlySubcommands are compose subcommands that only query state and
+// must never create or boot a VM. `config` is deliberately absent: it
+// renders the compose file, which is meaningful even with no VM, so it
+// still proxies (and may boot) to produce real output.
+var readOnlySubcommands = map[string]bool{
+	"ps":      true,
+	"logs":    true,
+	"top":     true,
+	"images":  true,
+	"port":    true,
+	"events":  true,
+	"version": true,
+	"ls":      true,
+}
+
+// isReadOnly reports whether args invoke a query-only compose subcommand.
+func isReadOnly(args []string) bool {
+	idx := SubcommandIndex(args)
+	return idx >= 0 && readOnlySubcommands[args[idx]]
+}
+
 // Exec runs `nerdctl compose <args>` inside the VM.
 // Args should be the raw compose arguments (e.g., ["-f", "file.yaml", "build"]).
 // Host paths in -f and --project-directory are translated to VM-internal paths.
 func (p *Proxy) Exec(ctx context.Context, args []string, interactive bool) error {
-	if err := p.manager.EnsureRunning(ctx); err != nil {
+	// Read-only queries never create a VM: if the project VM doesn't exist
+	// there is nothing to query, and the docker-compatible answer is empty
+	// output with exit 0 — not a fresh VM booted just to hear "nothing".
+	// (Notably, `compose ps` after `down` in full isolation used to recreate
+	// and leak the per-project VM.) An existing-but-stopped VM is still
+	// started: it may hold stopped services whose state the query is about.
+	if isReadOnly(args) {
+		running, err := p.manager.EnsureRunningIfExists(ctx)
+		if err != nil {
+			return err
+		}
+		if !running {
+			return nil
+		}
+	} else if err := p.manager.EnsureRunning(ctx); err != nil {
 		return err
 	}
 

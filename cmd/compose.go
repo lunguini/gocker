@@ -162,36 +162,9 @@ func isComposeDown(args []string) bool {
 	return idx >= 0 && args[idx] == "down"
 }
 
-// composeValueFlags are the compose *global* flags (before the subcommand)
-// that consume a following value. Used to skip past a flag's value when
-// locating the subcommand token.
-var composeValueFlags = map[string]bool{
-	"-f": true, "--file": true,
-	"-p": true, "--project-name": true,
-	"--project-directory": true,
-	"--profile":           true,
-	"--env-file":          true,
-	"--ansi":              true,
-	"--progress":          true,
-	"--parallel":          true,
-}
-
-// composeSubcommandIndex returns the index of the compose subcommand token
-// (up, down, exec, ...) in args, or -1 if none is present. It skips global
-// flags and their values so an argument that happens to equal a subcommand
-// name (e.g. a service named "down") is not mistaken for the subcommand.
+// composeSubcommandIndex locates the compose subcommand token; the logic
+// lives in the compose package (compose.SubcommandIndex) so the proxy can
+// classify read-only subcommands with the same rules.
 func composeSubcommandIndex(args []string) int {
-	for i := 0; i < len(args); i++ {
-		a := args[i]
-		if strings.HasPrefix(a, "-") {
-			// `--flag=value` carries its own value; a bare value flag consumes
-			// the next token.
-			if !strings.Contains(a, "=") && composeValueFlags[a] {
-				i++
-			}
-			continue
-		}
-		return i
-	}
-	return -1
+	return compose.SubcommandIndex(args)
 }
